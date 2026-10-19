@@ -191,6 +191,7 @@ td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space:
 .notice { border-radius: 12px; padding: 12px 14px; background: var(--accent-soft); }
 .notice.warn { background: var(--due-soft); color: var(--due); }
 .notice.err { background: var(--bad-soft); color: var(--bad); }
+select.da-scegliere { border-color: var(--due); box-shadow: 0 0 0 2px var(--due-soft); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-weight: 700; z-index: 30; max-width: calc(100% - 32px); text-align: center; }
 .saving { font-size: 0.85rem; color: var(--muted); }
 .empty { text-align: center; padding: 30px 10px; color: var(--muted); }
@@ -686,7 +687,7 @@ var URL_APP = location.origin + location.pathname;
       refSel + '<button class="btn" data-act="salva-dati">' + (d.nuovo ? 'Crea ordine e aggiungi i prodotti' : 'Salva dati') + '</button></div>';
   }
 
-  var CAMPI_IMP = [['nome', 'Nome del prodotto', /descr|prodott|nome|tipologia|articolo/i, 'obbligatorio'], ['categoria', 'Categoria', /categ|tipo prod|reparto/i, 'per raggruppare i prodotti, facoltativa'],
+  var CAMPI_IMP = [['nome', 'Nome del prodotto', /^\s*(descr|prodott|nome|tipologia|articolo)/i, 'obbligatorio'], ['dettaglio', 'Altra descrizione', /^\s*descr\w*\s*[2-9]|dettagl/i, 'aggiunta al nome per distinguere prodotti simili, es. integrale'], ['categoria', 'Categoria', /categ|tipo prod|reparto/i, 'per raggruppare i prodotti, facoltativa'],
     ['formato', 'Confezione o formato', /formato|peso|confez|stile/i, 'es. cassa 15 kg, 500 g'],
     ['prezzo', 'Prezzo', /ivato|prezzo|€|euro|listino/i, 'obbligatorio: il prezzo che pagano i soci (prima degli sconti dell\'ordine)'], ['qta_conf', 'Pezzi per cartone', /pezzi|cartone|conf\.|n\. ?pz/i, 'solo se si ordina a cartoni e il prezzo è del singolo pezzo'],
     ['varianti', 'Varianti', /variet|varian|gusto/i, 'es. varietà di mele, separate da virgola, facoltative']];
@@ -758,9 +759,12 @@ var URL_APP = location.origin + location.pathname;
       return '<div class="card stack"><h3>Non ho trovato prodotti</h3><p>Controlla qui sotto da quali colonne prendere il nome e il prezzo.</p>' + correggi +
         '<button class="btn quiet" data-act="imp-chiudi">Annulla</button></div>';
     }
+    var qtaHtml = sezioneQuantita(im, trovati);
+    var nQ = (qtaHtml && im.conQta !== false) ? righeImport(trovati, colonneSoci(im, trovati)).length : 0;
     return '<div class="card stack">' + avviso + '<h3>Ho trovato ' + trovati.length + ' prodotti</h3>' +
       '<p class="small">Controlla che nomi e prezzi siano giusti. Se va bene, tocca il pulsante verde. Potrai comunque modificare ogni prodotto dopo.</p>' +
-      '<button class="btn wide" data-act="imp-ok">Sì, aggiungi questi ' + trovati.length + ' prodotti</button>' +
+      qtaHtml +
+      '<button class="btn wide" data-act="imp-ok">Sì, aggiungi questi ' + trovati.length + ' prodotti' + (nQ ? ' e gli ordini dei soci' : '') + '</button>' +
       tabella + correggi +
       '<button class="btn quiet" data-act="imp-chiudi">Annulla</button></div>';
   }
@@ -821,8 +825,113 @@ var URL_APP = location.origin + location.pathname;
         var w = formato.toLowerCase().split(/[\s\d]/)[0];
         u = UNITA.indexOf(w) >= 0 ? (w === 'sacchi' ? 'sacco' : w) : (qc > 1 ? 'cartone' : 'pz');
       }
-      return { nome: bello(nome), categoria: bello(g('categoria')), formato: formato, prezzo: numIt(g('prezzo')), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: false, disponibile: true };
+      var dett = g('dettaglio');
+      if (dett && normNome(nome).indexOf(normNome(dett)) < 0) nome = bello(nome) + ' – ' + dett;
+      return { nome: bello(nome), categoria: bello(g('categoria')), formato: formato, prezzo: numIt(g('prezzo')), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: false, disponibile: true, riga: r };
     }).filter(function (p) { return p.nome && p.prezzo > 0; });
+  }
+
+  /* ---- quantità già ordinate dai soci (una colonna per socio) ---- */
+  function normNome(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  var NON_PERSONA = /^(tot|q\.?\s*t|quantit|prezz|import|scont|pi-|dispon|cod|iva|listin|serviz|peso|pezz|carton|descr|tipo|formato|confez|stile|categ|note|nome$|n\.?$|nr|data|€|euro)/i;
+  /** riconosce un socio dal titolo di colonna: "Francesca C", "francy B.", "Ester", "Giuseppe 2" (= persona esterna di Giuseppe) */
+  function trovaSocio(tit, soci) {
+    var t = normNome(tit); if (!t) return null;
+    var parti = t.split(' '), primo = parti[0], resto = parti.slice(1);
+    var num = resto.filter(function (x) { return /^\d+$/.test(x); });
+    var iniz = resto.filter(function (x) { return /^[a-z]{1,2}$/.test(x); })[0] || '';
+    var best = [], bestSc = 0;
+    soci.forEach(function (s) {
+      var sp = normNome(s.nome).split(' '), sPrimo = sp[0], sIniz = (sp[1] || '').charAt(0), sc = 0;
+      if (sPrimo === primo) sc = 3;
+      else if (primo.length >= 4 && (sPrimo.indexOf(primo) === 0 || primo.indexOf(sPrimo) === 0)) sc = 2;
+      else if (primo.length >= 4 && sPrimo.slice(0, 4) === primo.slice(0, 4)) sc = 1;
+      if (!sc) return;
+      if (iniz && sIniz) { if (iniz.charAt(0) !== sIniz) return; sc += 3; }
+      else if (iniz) sc -= 1;
+      else if (sIniz) sc -= 0.5;
+      if (sc > bestSc) { bestSc = sc; best = [s]; } else if (sc === bestSc) best.push(s);
+    });
+    if (best.length !== 1) return null;
+    return { socio: best[0], per_conto: num.length ? String(tit).replace(/\s+/g, ' ').trim() : '' };
+  }
+  /** "1", "2,5", "1 Golden", "1 no zucca" -> quantità e testo che segue */
+  function leggiCella(v) {
+    var s = String(v === undefined || v === null ? '' : v).trim();
+    if (!s || s === '-') return { q: 0 };
+    var m = s.match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+    if (m) return { q: numIt(m[1]), testo: m[2].trim() };
+    var m2 = s.match(/(\d+(?:[.,]\d+)?)/);
+    return m2 ? { q: numIt(m2[1]), testo: s } : { q: 0 };
+  }
+  /** colonne del foglio che contengono le quantità di un socio */
+  function colonneSoci(im, trovati) {
+    var intest = im.intest ? im.righe[0] : null; if (!intest) return [];
+    var usate = {};
+    Object.keys(im.mappa).forEach(function (k) { if (im.mappa[k] !== '' && im.mappa[k] !== undefined) usate[im.mappa[k]] = true; });
+    var soci = (S.data.soci || []).filter(function (s) { return s.attivo; }), out = [];
+    for (var j = 0; j < intest.length; j++) {
+      var tit = String(intest[j] || '').replace(/\s+/g, ' ').trim();
+      if (!tit || usate[j] || NON_PERSONA.test(tit)) continue;
+      // "Nome | Q.tà": il nome sta sopra l'importo, la quantità è nella colonna accanto
+      var jq = (j + 1 < intest.length && /^(q\.?\s*t|quant)/i.test(String(intest[j + 1] || '').trim())) ? j + 1 : j;
+      var n = trovati.filter(function (p) { return leggiCella(p.riga[jq]).q > 0; }).length;
+      if (!n) continue;
+      var auto = trovaSocio(tit, soci);
+      var scelto = im.assegna && im.assegna[j] !== undefined ? im.assegna[j] : (auto ? auto.socio.id : '');
+      out.push({ j: j, jq: jq, tit: tit, n: n, socio_id: scelto, per_conto: auto && String(scelto) === String(auto.socio.id) ? auto.per_conto : '', auto: !!auto });
+    }
+    return out;
+  }
+  function righeImport(trovati, cols) {
+    var acc = {}, out = [];
+    cols.forEach(function (c) {
+      if (!c.socio_id || c.socio_id === '-') return;
+      trovati.forEach(function (p, i) {
+        var x = leggiCella(p.riga[c.jq]); if (!(x.q > 0)) return;
+        var variante = '', note = '';
+        if (x.testo) {
+          var t = normNome(x.testo);
+          var vv = (p.varianti ? p.varianti.split(/\s*,\s*/) : []).filter(function (v) { var n = normNome(v); return n.length >= 3 && t && (n === t || t.indexOf(n) === 0 || n.indexOf(t) === 0); });
+          if (vv.length) variante = vv[0]; else note = x.testo;
+        }
+        var k = i + '|' + c.socio_id + '|' + c.per_conto + '|' + variante;
+        if (acc[k]) { acc[k].quantita += x.q; if (note) acc[k].note = (acc[k].note ? acc[k].note + '; ' : '') + note; return; }
+        acc[k] = { pi: i, socio_id: c.socio_id, per_conto: c.per_conto, variante: variante, quantita: x.q, note: note };
+        out.push(acc[k]);
+      });
+    });
+    return out;
+  }
+  function sezioneQuantita(im, trovati) {
+    var cols = colonneSoci(im, trovati);
+    if (!cols.length) return '';
+    var soci = (S.data.soci || []).filter(function (s) { return s.attivo; });
+    var conQta = im.conQta !== false;
+    var righe = conQta ? righeImport(trovati, cols) : [];
+    var nomeDi = function (id) { var s = soci.filter(function (x) { return String(x.id) === String(id); })[0]; return s ? s.nome : '?'; };
+    var senza = cols.filter(function (c) { return !c.socio_id; }).length;
+    var elenco = cols.map(function (c) {
+      return '<label class="f">Colonna “' + h(c.tit) + '”<span class="hint">' + c.n + (c.n === 1 ? ' prodotto' : ' prodotti') + (c.per_conto ? ' · persona esterna, paga ' + h(nomeDi(c.socio_id)) : '') + '</span>' +
+        '<select data-assegna="' + c.j + '"' + (c.socio_id ? '' : ' class="da-scegliere"') + '><option value=""' + (c.socio_id ? '' : ' selected') + '>Scegli il socio…</option><option value="-"' + (c.socio_id === '-' ? ' selected' : '') + '>Non importare</option>' +
+        soci.map(function (s) { return '<option value="' + h(s.id) + '"' + (String(s.id) === String(c.socio_id) ? ' selected' : '') + '>' + h(s.nome) + '</option>'; }).join('') + '</select></label>';
+    }).join('');
+    var perSocio = {};
+    righe.forEach(function (r) { var k = nomeDi(r.socio_id) + (r.per_conto ? ' (per ' + r.per_conto + ')' : ''); (perSocio[k] = perSocio[k] || []).push(r); });
+    var dettaglio = Object.keys(perSocio).sort().map(function (k) {
+      return '<div class="li"><div class="grow"><b>' + h(k) + '</b><div class="small muted">' + perSocio[k].map(function (r) {
+        var p = trovati[r.pi];
+        return qt(r.quantita) + ' ' + h(p.unita) + ' ' + h(p.nome) + (p.formato ? ' ' + h(p.formato) : '') + (r.variante ? ' <b>' + h(r.variante) + '</b>' : '') + (r.note ? ' <i>(“' + h(r.note) + '”: da controllare)</i>' : '');
+      }).join('<br>') + '</div></div></div>';
+    }).join('');
+    var nSoci = Object.keys(perSocio).length;
+    return '<div class="notice stack"><b>Nel foglio ci sono anche gli ordini dei soci</b>' +
+      '<label class="check"><input type="checkbox" id="imp-qta"' + (conQta ? ' checked' : '') + '> Carica anche le quantità già ordinate' + (conQta ? ': ' + righe.length + ' righe di ' + nSoci + (nSoci === 1 ? ' socio' : ' soci') : '') + '</label>' +
+      (conQta ? (senza ? '<div class="small"><b>' + senza + (senza === 1 ? ' colonna' : ' colonne') + ' senza socio:</b> scegli a chi appartiene, oppure “Non importare”.</div>' : '') +
+        '<details' + (senza ? ' open' : '') + '><summary>Colonne e soci</summary><div class="stack" style="margin-top:6px">' + elenco + '</div></details>' +
+        (righe.length ? '<details><summary>Cosa verrà caricato</summary><div class="list" style="margin-top:6px">' + dettaglio + '</div></details>' : '') +
+        '<div class="small muted">Dopo l’importazione trovi tutto in “Soci e pagamenti”. Le note “da controllare” restano visibili al referente.</div>' : '') +
+      '</div>';
   }
 
   function tFornitore() {
@@ -1074,10 +1183,19 @@ var URL_APP = location.origin + location.pathname;
       case 'imp-ok':
         var nuovi = estraiImport();
         if (!nuovi.length) { toast('Nessun prodotto valido: controlla le colonne di nome e prezzo'); break; }
+        var colQ = S.imp.conQta === false ? [] : colonneSoci(S.imp, nuovi);
+        nuovi.forEach(function (p) { p.id = 'n' + Math.random().toString(36).slice(2, 11); });
+        var daImp = righeImport(nuovi, colQ).map(function (x) {
+          return { prodotto_id: nuovi[x.pi].id, socio_id: x.socio_id, per_conto: x.per_conto, variante: x.variante, quantita: x.quantita, note: x.note };
+        });
+        nuovi.forEach(function (p) { delete p.riga; });
         S.prodEdit = S.prodEdit.concat(nuovi); S.imp = null;
-        call('salvaProdotti', S.data.ordine.id, S.prodEdit).then(function (r) {
+        var oid = S.data.ordine.id;
+        call('salvaProdotti', oid, S.prodEdit).then(function (r) {
+          return daImp.length ? call('importaRighe', oid, daImp) : r;
+        }).then(function (r) {
           var soci = S.data.soci, forn = S.data.fornitori; S.data = r; S.data.soci = soci; S.data.fornitori = forn; prepProdotti(); disegna();
-          toast(nuovi.length + ' prodotti aggiunti e salvati');
+          toast(nuovi.length + ' prodotti salvati' + (daImp.length ? ' e ' + (r.importate || daImp.length) + ' righe dei soci caricate' : ''));
         }, function (e) { S.prodDirty = true; disegna(); toast(errMsg(e)); });
         break;
       case 'copia-fornitore': copia(document.getElementById('testo-fornitore').value, 'testo-fornitore'); break;
@@ -1131,6 +1249,8 @@ var URL_APP = location.origin + location.pathname;
       S.prodDirty = true; disegna(); return;
     }
     if (ds.map) { S.imp.mappa[ds.map] = t.value === '' ? '' : +t.value; disegna(); return; }
+    if (ds.assegna !== undefined) { S.imp.assegna = S.imp.assegna || {}; S.imp.assegna[ds.assegna] = t.value; disegna(); return; }
+    if (t.id === 'imp-qta') { S.imp.conQta = t.checked; disegna(); return; }
     if (t.id === 'imp-start') { S.imp.start = +t.value; S.imp.intest = true; applicaStart(); disegna(); return; }
     if (t.id === 'imp-scheda') { leggiDaLink(S.imp.foglio.link, t.value); return; }
     if (t.id === 'imp-intest') { S.imp.intest = t.checked; if (t.checked && !Object.keys(S.imp.mappa).length) S.imp.mappa = indovinaMappa(S.imp.righe[0]); disegna(); return; }
