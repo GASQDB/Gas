@@ -649,8 +649,8 @@ var URL_APP = location.origin + location.pathname;
     if (d.nuovo) return testa + tDati();
     var c = S.conferma;
     var az = { bozza: [['aperto', 'Apri ai soci', ''], ['__elimina', c === 'elimina' ? 'Tocca ancora per eliminare' : 'Elimina bozza', 'danger']],
-      aperto: [['chiuso', c === 'chiuso' ? 'Tocca ancora per chiudere' : 'Chiudi l\'ordine', '']],
-      chiuso: [['consegnato', 'Segna come consegnato', ''], ['aperto', 'Riapri', 'ghost']],
+      aperto: [['chiuso', c === 'chiuso' ? 'Tocca ancora per chiudere' : 'Chiudi l\'ordine', ''], ['bozza', 'Rimetti in bozza', 'ghost']],
+      chiuso: [['consegnato', 'Segna come consegnato', ''], ['aperto', 'Riapri', 'ghost'], ['bozza', 'Rimetti in bozza', 'ghost']],
       consegnato: [['archiviato', 'Archivia', 'ghost']], archiviato: [['consegnato', 'Ripristina', 'ghost']] }[o.stato] || [];
     var avviso = 'Ordine aperto: ' + o.titolo + (o.fornitore ? ' (' + o.fornitore + ')' : '') + '\n' +
       (o.chiusura ? 'Si ordina fino a ' + dataLunga(o.chiusura) + '\n' : '') + (o.consegna ? 'Consegna ' + dataLunga(o.consegna) + '\n' : '') +
