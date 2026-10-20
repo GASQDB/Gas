@@ -420,7 +420,7 @@ var URL_APP = location.origin + location.pathname;
     return r ? r : null;
   }
   function totaleMio() {
-    var prezzi = {}; S.data.prodotti.forEach(function (p) { prezzi[p.id] = p.prezzo_unita; });
+    var prezzi = {}; S.data.prodotti.forEach(function (p) { prezzi[p.id] = p.pu_esatto || p.prezzo_unita; });
     var tot = 0, perChi = {};
     S.data.mie_righe.forEach(function (r) {
       var v = (prezzi[r.prodotto_id] || 0) * r.quantita; tot += v;
@@ -514,7 +514,7 @@ var URL_APP = location.origin + location.pathname;
       return (Object.keys(gruppi).length > 1 || k ? '<div class="eyebrow" style="margin-top:8px">' + (k ? 'Per ' + h(k) : 'Per ' + (d.socio_ordine.id !== S.boot.me.id ? h(d.socio_ordine.nome) : 'te')) + ' · ' + eur(t.perChi[k]) + '</div>' : '') +
         '<div class="list">' + gruppi[k].map(function (r) {
           var p = prezzi[r.prodotto_id] || { nome: '?', prezzo_unita: 0, unita: '' };
-          return '<div class="li"><div class="grow">' + qt(r.quantita) + ' × ' + h(p.nome) + (r.variante ? ' <b>' + h(r.variante) + '</b>' : '') + (r.note ? '<div class="muted small">' + h(r.note) + '</div>' : '') + '</div><div class="amt num">' + eur(p.prezzo_unita * r.quantita) + '</div></div>';
+          return '<div class="li"><div class="grow">' + qt(r.quantita) + ' × ' + h(p.nome) + (r.variante ? ' <b>' + h(r.variante) + '</b>' : '') + (r.note ? '<div class="muted small">' + h(r.note) + '</div>' : '') + '</div><div class="amt num">' + eur((p.pu_esatto || p.prezzo_unita) * r.quantita) + '</div></div>';
         }).join('') + '</div>';
     }).join('');
   }
