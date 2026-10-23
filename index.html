@@ -195,6 +195,10 @@ td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space:
 #cam-reader { width: 100%; max-width: 480px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; min-height: 160px; }
 .cam-info { font-size: 1.05rem; display: flex; flex-direction: column; gap: 6px; max-width: 480px; margin: 0 auto; width: 100%; }
 .cam-msg { font-weight: 700; font-size: 1.15rem; }
+.cam-ov.lampo-ok { animation: lampoOk .6s ease-out; }
+.cam-ov.lampo-no { animation: lampoNo .9s ease-out; }
+@keyframes lampoOk { 0% { background: #2e9e5b; } 100% { background: #101412; } }
+@keyframes lampoNo { 0%, 40% { background: #c9731f; } 100% { background: #101412; } }
 .cam-msg.warn { color: #ffb86b; }
 select.da-scegliere { border-color: var(--due); box-shadow: 0 0 0 2px var(--due-soft); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-weight: 700; z-index: 30; max-width: calc(100% - 32px); text-align: center; }
@@ -303,7 +307,10 @@ var URL_APP = location.origin + location.pathname;
 
   /* ========== navigazione ========== */
   function vai(view, p, sostituisci) {
-    if (!sostituisci) S.stack.push({ view: S.view, p: S.p });
+    if (!sostituisci) {
+      S.stack.push({ view: S.view, p: S.p });
+      try { history.pushState({ gas: 1 }, ''); } catch (e) {}   // così il tasto "indietro" del telefono resta nell'app
+    }
     S.view = view; S.p = p || {}; S.data = null; S.cerca = '';
     window.scrollTo(0, 0);
     carica();
@@ -314,6 +321,15 @@ var URL_APP = location.origin + location.pathname;
     S.view = x.view; S.p = x.p; S.data = null; carica();
   }
   function radice(view) { S.stack = []; vai(view, {}, true); }
+  /** pulsanti "‹ Indietro" e "Fatto": passano dalla cronologia del browser, come il tasto del telefono */
+  function torna() {
+    var st = null; try { st = history.state; } catch (e) {}
+    if (st && st.gas) history.back(); else indietro();
+  }
+  window.addEventListener('popstate', function () {
+    if (S.camHist) { S.camHist = false; chiudiCamera(); if (S.pz) S.pz.doppio = null; disegna(); return; }
+    indietro();
+  });
 
   var app = document.getElementById('app');
   function mostra(html) { app.innerHTML = html; disegnaNav(); }
@@ -1079,7 +1095,10 @@ var URL_APP = location.origin + location.pathname;
       }, function (e) { z.busy = false; z.msg = errMsg(e); aggiornaCamInfo(); toast(z.msg); });
   }
   function suono(ok) {
-    try { if (navigator.vibrate) navigator.vibrate(ok ? 60 : [80, 60, 80]); } catch (e) {}
+    try { if (navigator.vibrate) navigator.vibrate(ok ? 250 : [200, 120, 200, 120, 200]); } catch (e) {}
+    // lampo verde (letto) o arancione (attenzione): si vede anche dove il telefono non vibra (iPhone)
+    var ov = document.getElementById('cam-ov');
+    if (ov) { ov.classList.remove('lampo-ok', 'lampo-no'); void ov.offsetWidth; ov.classList.add(ok ? 'lampo-ok' : 'lampo-no'); }
     try {
       var a = suono.ctx || (suono.ctx = new (window.AudioContext || window.webkitAudioContext)());
       var o = a.createOscillator(), g = a.createGain();
@@ -1115,6 +1134,7 @@ var URL_APP = location.origin + location.pathname;
   function apriCamera() {
     if (!selPz()) { toast('Scegli prima il socio'); return; }
     var z = statoPz(); z.msg = ''; z.doppio = null; z.ultimo = ''; z.ultimoOk = '';
+    if (!S.camHist) { try { history.pushState({ gas: 1, cam: 1 }, ''); S.camHist = true; } catch (e) {} }
     var ov = document.getElementById('cam-ov');
     if (!ov) { ov = document.createElement('div'); ov.id = 'cam-ov'; ov.className = 'cam-ov'; document.body.appendChild(ov); }
     ov.innerHTML = '<div id="cam-reader"></div><div id="cam-info" class="cam-info"></div>' +
@@ -1126,7 +1146,7 @@ var URL_APP = location.origin + location.pathname;
       CAM = new Html5Qrcode('cam-reader', { formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13], verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
       return CAM.start({ facingMode: 'environment' }, { fps: 10, qrbox: function (w) { return { width: Math.floor(Math.min(w * 0.9, 340)), height: 120 }; } }, codiceLetto, function () {});
     }).catch(function (e) {
-      chiudiCamera();
+      if (S.camHist) history.back(); else chiudiCamera();
       toast(/permission|notallowed/i.test(String(e)) ? 'Permesso della fotocamera negato: consentilo nelle impostazioni del browser' : (errMsg(e) || 'Fotocamera non disponibile: scrivi il prezzo a mano'));
     });
   }
@@ -1309,7 +1329,7 @@ var URL_APP = location.origin + location.pathname;
       var st = ds.stato, o = S.data.ordine;
       if (st === '__elimina') {
         if (S.conferma !== 'elimina') { S.conferma = 'elimina'; disegna(); return; }
-        call('eliminaOrdine', o.id).then(function () { toast('Bozza eliminata'); indietro(); }, function (e) { toast(errMsg(e)); });
+        call('eliminaOrdine', o.id).then(function () { toast('Bozza eliminata'); torna(); }, function (e) { toast(errMsg(e)); });
         return;
       }
       if (st === 'chiuso' && S.conferma !== 'chiuso') { S.conferma = 'chiuso'; disegna(); return; }
@@ -1346,7 +1366,7 @@ var URL_APP = location.origin + location.pathname;
     if (ds.attiva) { call('salvaSocio', { id: ds.attiva, attivo: ds.val === '1' }).then(function (r) { S.data = r; disegna(); }, function (e) { toast(errMsg(e)); }); return; }
 
     switch (act) {
-      case 'back': indietro(); break;
+      case 'back': torna(); break;
       case 'esci': memTogli(); S.codice = ''; S.boot = null; S.stack = []; vAccesso(''); break;
       case 'entra-pin':
         var sid = document.getElementById('pin-nome').value, pv = document.getElementById('pin-in').value.trim();
@@ -1415,7 +1435,9 @@ var URL_APP = location.origin + location.pathname;
         }, function (e) { S.prodDirty = true; disegna(); toast(errMsg(e)); });
         break;
       case 'pz-scan': apriCamera(); break;
-      case 'pz-chiudi-cam': chiudiCamera(); statoPz().doppio = null; disegna(); break;
+      case 'pz-chiudi-cam':
+        if (S.camHist) history.back(); else { chiudiCamera(); statoPz().doppio = null; disegna(); }
+        break;
       case 'pz-add':
         var pzv = numIt(document.getElementById('pz-prezzo').value);
         if (!(pzv > 0)) { toast('Scrivi il prezzo del pezzo'); break; }
