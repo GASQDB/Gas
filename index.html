@@ -191,6 +191,11 @@ td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space:
 .notice { border-radius: 12px; padding: 12px 14px; background: var(--accent-soft); }
 .notice.warn { background: var(--due-soft); color: var(--due); }
 .notice.err { background: var(--bad-soft); color: var(--bad); }
+.cam-ov { position: fixed; left: 0; right: 0; top: 0; z-index: 50; background: #101412; color: #f4f1ea; padding: 12px 12px 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+#cam-reader { width: 100%; max-width: 480px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; min-height: 160px; }
+.cam-info { font-size: 1.05rem; display: flex; flex-direction: column; gap: 6px; max-width: 480px; margin: 0 auto; width: 100%; }
+.cam-msg { font-weight: 700; font-size: 1.15rem; }
+.cam-msg.warn { color: #ffb86b; }
 select.da-scegliere { border-color: var(--due); box-shadow: 0 0 0 2px var(--due-soft); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-weight: 700; z-index: 30; max-width: calc(100% - 32px); text-align: center; }
 .saving { font-size: 0.85rem; color: var(--muted); }
@@ -354,6 +359,7 @@ var URL_APP = location.origin + location.pathname;
   }
   function disegna() {
     var f = { ordini: vOrdini, ordina: vOrdina, conti: vConti, gestione: vGestione, gOrdine: vGOrdine, soci: vSoci, fornitori: vFornitori }[S.view];
+    if (!(S.view === 'gOrdine' && S.p && S.p.tab === 'pesata')) chiudiCamera();
     mostra(f());
     if (S.view === 'ordina') aggiornaBarraOrdine();
   }
@@ -461,7 +467,12 @@ var URL_APP = location.origin + location.pathname;
     var cerca = d.prodotti.length > 10 ? '<input type="search" id="cerca" placeholder="Cerca un prodotto…" value="' + h(S.cerca) + '">' : '';
     var lista = '<div class="stack" id="lista">' + listaProdotti() + '</div>';
 
-    return testa + '<div class="stack-lg">' + info + avvisi + chi + '<div class="stack">' + cerca + lista + '</div>' +
+    var mp = d.mie_pezzi || [];
+    var pesati = mp.length ? '<div class="card stack"><h3>I tuoi pezzi, pesati dal referente</h3><div class="list">' + mp.map(function (x) {
+      return '<div class="li"><div class="grow">' + h(x.descrizione || 'Pezzo') + (x.per_conto ? ' <span class="muted">per ' + h(x.per_conto) + '</span>' : '') + '</div><div class="amt num">' + eur(x.importo) + '</div></div>';
+    }).join('') + '<div class="li"><div class="grow"><b>Totale pezzi</b></div><div class="amt num"><b>' + eur(mp.reduce(function (a, x) { return a + x.importo; }, 0)) + '</b></div></div></div>' +
+      '<div class="muted small">L’importo da pagare è in “I miei conti”.</div></div>' : '';
+    return testa + '<div class="stack-lg">' + info + pesati + avvisi + chi + '<div class="stack">' + cerca + lista + '</div>' +
       '<div class="card"><h3>Riepilogo del tuo ordine</h3><div id="riepilogo-mio"></div></div></div>';
   }
   function listaProdotti() {
@@ -565,7 +576,9 @@ var URL_APP = location.origin + location.pathname;
       var dett = v.pagato ? 'Pagato' + (v.metodo ? ' con ' + h(v.metodo.toLowerCase()) : '') + (v.data_pagamento ? ' il ' + h(dataBreve(v.data_pagamento)) : '')
         : (v.stato === 'aperto' ? 'Ordine ancora aperto: l\'importo può cambiare' : 'Da dare a ' + h(v.referente) + (v.pagamento === 'anticipato' ? ' prima della consegna' : ' alla consegna'));
       return '<div class="li"><div class="grow"><b>' + h(v.titolo) + '</b>' + (v.per_conto ? ' <span class="muted">per ' + h(v.per_conto) + '</span>' : '') +
-        '<div class="muted small">' + dett + (v.provvisorio ? ' · importo provvisorio, a peso' : '') + '</div></div><div class="amt num">' + eur(v.importo) + '</div></div>';
+        '<div class="muted small">' + dett + (v.provvisorio ? ' · importo provvisorio, a peso' : '') + '</div>' +
+        (v.pezzi && v.pezzi.length ? '<div class="small">' + v.pezzi.map(function (x) { return h(x.descrizione || 'Pezzo') + ' ' + eur(x.importo); }).join(' · ') + '</div>' : '') +
+        '</div><div class="amt num">' + eur(v.importo) + '</div></div>';
     };
     var blocco = function (tit, arr) { return arr.length ? '<div class="card"><h3>' + tit + '</h3><div class="list">' + arr.map(voce).join('') + '</div></div>' : ''; };
     var mov = d.movimenti.length ? '<div class="card"><h3>Crediti e rettifiche</h3><div class="list">' + d.movimenti.map(function (m) {
@@ -661,8 +674,11 @@ var URL_APP = location.origin + location.pathname;
       (o.stato === 'aperto' ? '<a class="btn small ghost" target="_blank" rel="noopener" href="' + h(linkWA('', avviso)) + '">Avviso WhatsApp</a>' : '') +
       '<button class="btn small quiet" data-act="duplica">Duplica</button></div>';
     var tabs = [['pagamenti', 'Soci e pagamenti'], ['fornitore', 'Per il fornitore'], ['prodotti', 'Prodotti'], ['dati', 'Dati ordine']];
+    var aPeso = (d.prodotti || []).some(function (p) { return p.peso_variabile; }) || (d.pezzi || []).length > 0;
+    if (aPeso && o.stato !== 'archiviato') tabs.splice(1, 0, ['pesata', 'Pesata']);
+    if (tab === 'pesata' && !aPeso) tab = S.p.tab = 'pagamenti';
     var tb = '<div class="tabs" role="tablist">' + tabs.map(function (t) { return '<button role="tab" class="' + (tab === t[0] ? 'on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
-    var corpo = { dati: tDati, prodotti: tProdotti, fornitore: tFornitore, pagamenti: tPagamenti }[tab]();
+    var corpo = { dati: tDati, prodotti: tProdotti, fornitore: tFornitore, pagamenti: tPagamenti, pesata: tPesata }[tab]();
     return testa + '<div class="stack-lg">' + azioni + tb + corpo + '</div>';
   }
 
@@ -960,6 +976,160 @@ var URL_APP = location.origin + location.pathname;
       '<textarea id="testo-fornitore" hidden readonly>' + h(testo) + '</textarea></div>';
   }
 
+  /* ========== pesata: pezzi a peso letti dal codice a barre ========== */
+  function statoPz() { return S.pz || (S.pz = { sel: '', tipo: '', ultimo: '', t: 0, busy: false, doppio: null, msg: '' }); }
+  function selPz() {
+    var z = statoPz(); if (!z.sel) return null;
+    var i = z.sel.indexOf('|'), id = z.sel.slice(0, i), per = z.sel.slice(i + 1);
+    var s = (S.data.soci || []).filter(function (x) { return String(x.id) === id; })[0];
+    return { socio_id: id, per_conto: per, nome: (s ? s.nome : '?') + (per ? ' (per ' + per + ')' : '') };
+  }
+  function pezziDi(sel) {
+    return (S.data.pezzi || []).filter(function (z) { return sel && String(z.socio_id) === sel.socio_id && (z.per_conto || '') === sel.per_conto; });
+  }
+  /** EAN-13 dei prodotti a peso: 2 X AAAAA PPPPP C  ->  prezzo PPPPP in centesimi */
+  function leggiEAN(c) {
+    if (!/^\d{13}$/.test(c)) return { ok: false };
+    var s = 0; for (var i = 0; i < 12; i++) s += (+c.charAt(i)) * (i % 2 ? 3 : 1);
+    if ((10 - s % 10) % 10 !== +c.charAt(12)) return { ok: false };
+    return { ok: true, prezzo: c.charAt(0) === '2' ? parseInt(c.substr(7, 5), 10) / 100 : null };
+  }
+  function tPesata() {
+    var d = S.data, z = statoPz(), pg = d.paganti || [], soci = (d.soci || []).filter(function (s) { return s.attivo; });
+    var conRighe = pg.filter(function (p) { return p.righe.length; });
+    if (!z.sel && conRighe.length) z.sel = conRighe[0].socio_id + '|' + conRighe[0].per_conto;
+    var gia = {}; conRighe.forEach(function (p) { gia[p.socio_id + '|' + p.per_conto] = true; });
+    var opt = function (v, t) { return '<option value="' + h(v) + '"' + (z.sel === v ? ' selected' : '') + '>' + h(t) + '</option>'; };
+    var sel = '<label class="f">Pezzi di<select id="pz-socio">' + (z.sel ? '' : '<option value="">Scegli il socio…</option>') +
+      (conRighe.length ? '<optgroup label="Hanno ordinato">' + conRighe.map(function (p) { return opt(p.socio_id + '|' + p.per_conto, p.nome + (p.per_conto ? ' (per ' + p.per_conto + ')' : '')); }).join('') + '</optgroup>' : '') +
+      '<optgroup label="Altri soci">' + soci.filter(function (s) { return !gia[s.id + '|']; }).map(function (s) { return opt(s.id + '|', s.nome); }).join('') + '</optgroup></select></label>';
+    var prodotti = d.prodotti || [];
+    var tipo = '<label class="f">Tipo<span class="hint">resta scelto per i pezzi successivi</span><select id="pz-tipo"><option value="">—</option>' + prodotti.map(function (p) {
+      return '<option value="' + h(p.id) + '"' + (z.tipo === p.id ? ' selected' : '') + '>' + h(p.nome + (p.formato ? ' ' + p.formato : '')) + '</option>';
+    }).join('') + '</select></label>';
+    var s = selPz(), mio = s ? pg.filter(function (p) { return String(p.socio_id) === s.socio_id && p.per_conto === s.per_conto; })[0] : null;
+    var ordinato = mio && mio.righe.length ? '<div class="small"><b>Ha ordinato:</b> ' + mio.righe.map(function (r) { return h(qt(r.quantita) + ' × ' + r.prodotto + (r.formato ? ' ' + r.formato : '') + (r.variante ? ' ' + r.variante : '')); }).join(', ') + '</div>' : '';
+    var pezzi = pezziDi(s), totP = pezzi.reduce(function (a, x) { return a + x.importo; }, 0);
+    var lista = pezzi.length ? '<div class="list">' + pezzi.map(function (x) {
+      return '<div class="li"><div class="grow">' + h(x.descrizione || 'Pezzo') + (x.codice ? '<div class="muted small">' + h(x.codice) + '</div>' : '') + '</div><div class="amt num">' + eur(x.importo) + '</div>' +
+        '<button class="btn small quiet" data-pztogli="' + h(x.id) + '" aria-label="Togli">×</button></div>';
+    }).join('') + '<div class="li"><div class="grow"><b>' + pezzi.length + (pezzi.length === 1 ? ' pezzo' : ' pezzi') + '</b></div><div class="amt num"><b>' + eur(totP) + '</b></div></div></div>' : '<div class="muted small">Nessun pezzo ancora.</div>';
+    var doppio = z.doppio && !document.getElementById('cam-ov') ? '<div class="notice warn stack"><div>' + h(z.msg) + '</div><button class="btn small" data-act="pz-forza">È un altro pezzo uguale: aggiungilo</button></div>' : '';
+    var carta1 = '<div class="card stack">' + sel + ordinato + tipo +
+      '<button class="btn wide" data-act="pz-scan">Leggi i codici a barre</button>' +
+      '<div class="row"><input type="text" inputmode="decimal" id="pz-prezzo" placeholder="Prezzo a mano, es. 27,05" style="flex:1 1 160px"><button class="btn small ghost" data-act="pz-add">Aggiungi</button></div>' +
+      doppio + lista + '</div>';
+    // riepilogo e scontrino
+    var tutti = d.pezzi || [], assegnato = tutti.reduce(function (a, x) { return a + x.importo; }, 0);
+    var interessati = pg.filter(function (p) { return p.pezzi.length || p.peso_variabile; });
+    var riep = interessati.map(function (p) {
+      return '<div class="li"><div class="grow">' + h(p.nome) + (p.per_conto ? ' <span class="muted">per ' + h(p.per_conto) + '</span>' : '') +
+        '<div class="muted small">' + (p.pezzi.length ? p.pezzi.length + (p.pezzi.length === 1 ? ' pezzo' : ' pezzi') + ' · ' + eur(p.pesato) : '<span style="color:var(--due)">da pesare</span>') + '</div></div><div class="amt num">' + eur(p.dovuto) + '</div></div>';
+    }).join('');
+    var sc = d.ordine.scontrino, diff = sc === '' ? null : Math.round((sc - assegnato) * 100) / 100;
+    var controllo = diff === null ? '' : (Math.abs(diff) < 0.005 ? '<div class="notice">Tutto assegnato: i pezzi tornano con lo scontrino ✓</div>'
+      : '<div class="notice warn">' + (diff > 0 ? 'Mancano ' + eur(diff) + ': c’è almeno un pezzo non ancora assegnato.' : 'Hai assegnato ' + eur(-diff) + ' in più dello scontrino: forse un pezzo letto due volte.') + '</div>');
+    var testo = d.ordine.titolo + ' – importi dopo la divisione\n' + interessati.filter(function (p) { return p.pezzi.length; }).map(function (p) {
+      return p.nome + (p.per_conto ? ' (per ' + p.per_conto + ')' : '') + ': ' + eur(p.dovuto) + ' (' + p.pezzi.length + (p.pezzi.length === 1 ? ' pezzo' : ' pezzi') + ')';
+    }).join('\n') + '\nIl dettaglio dei pezzi è nell’app, in “I miei conti”.';
+    var carta2 = '<div class="card stack"><h3>Riepilogo</h3><div class="list">' + riep + '</div>' +
+      '<div class="row between"><b>Pezzi assegnati</b><b class="num">' + eur(assegnato) + '</b></div>' +
+      '<label class="f">Totale dello scontrino<span class="hint">per controllare che tutti i pezzi siano stati assegnati</span><input type="text" inputmode="decimal" id="pz-scontrino" value="' + (sc === '' ? '' : h(String(sc).replace('.', ','))) + '" placeholder="Es. 412,30"></label>' + controllo +
+      '<details><summary>Messaggio per la chat</summary><div class="stack" style="margin-top:6px"><textarea id="pz-testo" rows="8">' + h(testo) + '</textarea>' +
+      '<div class="row"><button class="btn small ghost" data-act="pz-copia">Copia</button><a class="btn small ghost" target="_blank" rel="noopener" href="' + h(linkWA('', testo)) + '">Apri WhatsApp</a></div></div></details></div>';
+    return '<div class="stack">' + carta1 + carta2 + '</div>';
+  }
+  function aggiornaPesata(r) {
+    S.data.pezzi = r.pezzi; S.data.paganti = r.paganti; S.data.ordine.scontrino = r.scontrino;
+  }
+  function aggiungiPezzo(cod, prezzo, forza) {
+    var z = statoPz(), s = selPz();
+    if (!s) { z.msg = 'Scegli prima il socio.'; aggiornaCamInfo(); toast(z.msg); return; }
+    if (cod) {
+      var art = cod.substr(2, 5);
+      var prima = (S.data.pezzi || []).filter(function (x) { return x.codice && x.codice.substr(2, 5) === art && x.prodotto_id; }).pop();
+      if (prima) z.tipo = prima.prodotto_id;
+    }
+    var p = (S.data.prodotti || []).filter(function (x) { return x.id === z.tipo; })[0];
+    z.busy = true; z.msg = 'Salvo ' + eur(prezzo) + '…'; aggiornaCamInfo();
+    call('aggiungiPezzo', { ordine_id: S.data.ordine.id, socio_id: s.socio_id, per_conto: s.per_conto, prodotto_id: z.tipo, descrizione: p ? p.nome : '', codice: cod, importo: prezzo, forza: !!forza })
+      .then(function (r) {
+        z.busy = false; aggiornaPesata(r);
+        if (r.doppione) {
+          z.doppio = { cod: cod, prezzo: prezzo };
+          z.msg = 'Questo codice è già stato letto' + (r.doppione.nome ? ' per ' + r.doppione.nome : '') + ' (' + eur(r.doppione.importo) + ').';
+          suono(false);
+        } else {
+          z.doppio = null; z.ultimoOk = cod;
+          var tot = pezziDi(s).reduce(function (a, x) { return a + x.importo; }, 0);
+          z.msg = '✓ ' + eur(prezzo) + (p ? ' · ' + p.nome : '') + ' — ' + s.nome + ': ' + eur(tot);
+          suono(true);
+        }
+        aggiornaCamInfo(); disegna();
+      }, function (e) { z.busy = false; z.msg = errMsg(e); aggiornaCamInfo(); toast(z.msg); });
+  }
+  function suono(ok) {
+    try { if (navigator.vibrate) navigator.vibrate(ok ? 60 : [80, 60, 80]); } catch (e) {}
+    try {
+      var a = suono.ctx || (suono.ctx = new (window.AudioContext || window.webkitAudioContext)());
+      var o = a.createOscillator(), g = a.createGain();
+      o.frequency.value = ok ? 1200 : 300; g.gain.value = 0.08; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + (ok ? 0.1 : 0.3));
+    } catch (e) {}
+  }
+  var CAM = null;
+  function caricaLettore() {
+    if (window.Html5Qrcode) return Promise.resolve();
+    return new Promise(function (ok, ko) {
+      var sc = document.createElement('script');
+      sc.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+      sc.onload = ok; sc.onerror = function () { ko(new Error('Non riesco a caricare il lettore di codici: controlla la connessione, oppure scrivi il prezzo a mano.')); };
+      document.head.appendChild(sc);
+    });
+  }
+  function aggiornaCamInfo() {
+    var el = document.getElementById('cam-info'); if (!el) return;
+    var z = statoPz(), s = selPz(), p = (S.data.prodotti || []).filter(function (x) { return x.id === z.tipo; })[0];
+    el.innerHTML = '<div>Pezzi di <b>' + h(s ? s.nome : '?') + '</b>' + (p ? ' · ' + h(p.nome) : '') + '</div>' +
+      '<div class="cam-msg' + (z.doppio && !z.doppio.stesso ? ' warn' : '') + '">' + h(z.msg || 'Inquadra il codice a barre dell’etichetta') + '</div>' +
+      (z.doppio && z.doppio.stesso ? '<div class="small">Il codice inquadrato è quello del pezzo appena aggiunto. Passa al pezzo successivo, oppure:</div>' : '') +
+      (z.doppio ? '<button class="btn small ' + (z.doppio.stesso ? 'quiet' : '') + '" data-act="pz-forza">È un altro pezzo uguale: aggiungilo</button>' : '');
+  }
+  function apriCamera() {
+    if (!selPz()) { toast('Scegli prima il socio'); return; }
+    var z = statoPz(); z.msg = ''; z.doppio = null; z.ultimo = ''; z.ultimoOk = '';
+    var ov = document.getElementById('cam-ov');
+    if (!ov) { ov = document.createElement('div'); ov.id = 'cam-ov'; ov.className = 'cam-ov'; document.body.appendChild(ov); }
+    ov.innerHTML = '<div id="cam-reader"></div><div id="cam-info" class="cam-info"></div><button class="btn wide" data-act="pz-chiudi-cam">Fine, chiudi la fotocamera</button>';
+    aggiornaCamInfo();
+    caricaLettore().then(function () {
+      CAM = new Html5Qrcode('cam-reader', { formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13], verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
+      return CAM.start({ facingMode: 'environment' }, { fps: 10, qrbox: function (w) { return { width: Math.floor(Math.min(w * 0.9, 340)), height: 120 }; } }, codiceLetto, function () {});
+    }).catch(function (e) {
+      chiudiCamera();
+      toast(/permission|notallowed/i.test(String(e)) ? 'Permesso della fotocamera negato: consentilo nelle impostazioni del browser' : (errMsg(e) || 'Fotocamera non disponibile: scrivi il prezzo a mano'));
+    });
+  }
+  function chiudiCamera() {
+    var ov = document.getElementById('cam-ov');
+    if (CAM) { var c = CAM; CAM = null; try { c.stop().then(function () { c.clear(); }, function () {}); } catch (e) {} }
+    if (ov) ov.parentNode.removeChild(ov);
+  }
+  function codiceLetto(txt) {
+    var z = statoPz(), c = String(txt || '').replace(/\D/g, '');
+    if (z.busy) return;
+    // il pezzo appena aggiunto resta inquadrato: niente allarmi, solo un tasto se è davvero un secondo pezzo uguale
+    if (c === z.ultimoOk) {
+      if (!z.doppio) { z.doppio = { cod: c, prezzo: leggiEAN(c).prezzo, stesso: true }; aggiornaCamInfo(); }
+      return;
+    }
+    if (c === z.ultimo && Date.now() - z.t < 4000) return;
+    z.ultimo = c; z.t = Date.now();
+    var v = leggiEAN(c);
+    if (!v.ok) { z.msg = 'Lettura non riuscita, riprova'; aggiornaCamInfo(); return; }
+    if (v.prezzo === null) { z.msg = 'Questo codice non contiene il prezzo: chiudi e scrivilo a mano.'; suono(false); aggiornaCamInfo(); return; }
+    aggiungiPezzo(c, v.prezzo, false);
+  }
+
   function tPagamenti() {
     var d = S.data, pg = d.paganti || [], o = d.ordine;
     var tot = pg.reduce(function (s, p) { return s + p.dovuto; }, 0), inc = pg.reduce(function (s, p) { return s + (p.pagato ? p.dovuto : 0); }, 0);
@@ -1110,6 +1280,10 @@ var URL_APP = location.origin + location.pathname;
     if (ds.step) { var inp = t.parentNode.querySelector('input'); cambiaQta(ds.p, ds.v || '', (Number(inp.value) || 0) + Number(ds.step)); return; }
     if (ds.per !== undefined && t.classList.contains('chip')) { S.perConto = ds.per; disegna(); return; }
     if (ds.tab) { S.p.tab = ds.tab; S.conferma = ''; disegna(); return; }
+    if (ds.pztogli) {
+      call('togliPezzo', S.data.ordine.id, ds.pztogli).then(function (r) { aggiornaPesata(r); disegna(); toast('Pezzo tolto'); }, function (e) { toast(errMsg(e)); });
+      return;
+    }
     if (ds.stato) {
       var st = ds.stato, o = S.data.ordine;
       if (st === '__elimina') {
@@ -1219,6 +1393,16 @@ var URL_APP = location.origin + location.pathname;
             (daImp.length ? ' · ' + (r.importate || daImp.length) + ' righe dei soci caricate' : ''));
         }, function (e) { S.prodDirty = true; disegna(); toast(errMsg(e)); });
         break;
+      case 'pz-scan': apriCamera(); break;
+      case 'pz-chiudi-cam': chiudiCamera(); statoPz().doppio = null; disegna(); break;
+      case 'pz-add':
+        var pzv = numIt(document.getElementById('pz-prezzo').value);
+        if (!(pzv > 0)) { toast('Scrivi il prezzo del pezzo'); break; }
+        aggiungiPezzo('', pzv, false); break;
+      case 'pz-forza':
+        var dz = statoPz().doppio; if (dz) { statoPz().doppio = null; aggiungiPezzo(dz.cod, dz.prezzo, true); }
+        break;
+      case 'pz-copia': copia(document.getElementById('pz-testo').value, 'pz-testo'); break;
       case 'copia-fornitore': copia(document.getElementById('testo-fornitore').value, 'testo-fornitore'); break;
       case 'salva-importi':
         var i = +ds.i, pp = S.data.paganti[i];
@@ -1270,6 +1454,9 @@ var URL_APP = location.origin + location.pathname;
       S.prodDirty = true; disegna(); return;
     }
     if (ds.map) { S.imp.mappa[ds.map] = t.value === '' ? '' : +t.value; disegna(); return; }
+    if (t.id === 'pz-socio') { statoPz().sel = t.value; statoPz().doppio = null; statoPz().ultimoOk = ''; statoPz().msg = ''; disegna(); return; }
+    if (t.id === 'pz-tipo') { statoPz().tipo = t.value; return; }
+    if (t.id === 'pz-scontrino') { call('salvaScontrino', S.data.ordine.id, t.value).then(function (r) { aggiornaPesata(r); disegna(); }, function (e) { toast(errMsg(e)); }); return; }
     if (ds.assegna !== undefined) { S.imp.assegna = S.imp.assegna || {}; S.imp.assegna[ds.assegna] = t.value; disegna(); return; }
     if (t.id === 'imp-qta') { S.imp.conQta = t.checked; disegna(); return; }
     if (t.id === 'imp-start') { S.imp.start = +t.value; S.imp.intest = true; applicaStart(); disegna(); return; }
