@@ -987,6 +987,8 @@ var URL_APP = location.origin + location.pathname;
   function pezziDi(sel) {
     return (S.data.pezzi || []).filter(function (z) { return sel && String(z.socio_id) === sel.socio_id && (z.per_conto || '') === sel.per_conto; });
   }
+  /** parte centrale del codice -> tipo di formaggio (Fattoria Fiori) */
+  var TIPI_EAN = { '00958': 'stagionato', '00959': 'stravecchio' };
   /** EAN-13 dei prodotti a peso: 2 X AAAAA PPPPP C  ->  prezzo PPPPP in centesimi */
   function leggiEAN(c) {
     if (!/^\d{13}$/.test(c)) return { ok: false };
@@ -1042,17 +1044,25 @@ var URL_APP = location.origin + location.pathname;
   function aggiornaPesata(r) {
     S.data.pezzi = r.pezzi; S.data.paganti = r.paganti; S.data.ordine.scontrino = r.scontrino;
   }
-  function aggiungiPezzo(cod, prezzo, forza) {
+  function aggiungiPezzo(cod, prezzo, forza, tipoForzato) {
     var z = statoPz(), s = selPz();
     if (!s) { z.msg = 'Scegli prima il socio.'; aggiornaCamInfo(); toast(z.msg); return; }
     if (cod) {
-      var art = cod.substr(2, 5);
-      var prima = (S.data.pezzi || []).filter(function (x) { return x.codice && x.codice.substr(2, 5) === art && x.prodotto_id; }).pop();
-      if (prima) z.tipo = prima.prodotto_id;
+      var art = cod.substr(2, 5), prodotti = S.data.prodotti || [];
+      var parola = TIPI_EAN[art];
+      if (parola) {
+        // il codice dice il tipo (es. 00958 = stagionato): se il tipo scelto non corrisponde, prendo il primo prodotto giusto
+        var giusti = prodotti.filter(function (x) { return normNome(x.nome).indexOf(parola) >= 0; });
+        if (giusti.length && !giusti.some(function (x) { return x.id === z.tipo; })) z.tipo = giusti[0].id;
+      } else {
+        var prima = (S.data.pezzi || []).filter(function (x) { return x.codice && x.codice.substr(2, 5) === art && x.prodotto_id; }).pop();
+        if (prima) z.tipo = prima.prodotto_id;
+      }
     }
-    var p = (S.data.prodotti || []).filter(function (x) { return x.id === z.tipo; })[0];
+    var tipo = tipoForzato !== undefined ? tipoForzato : z.tipo;
+    var p = (S.data.prodotti || []).filter(function (x) { return x.id === tipo; })[0];
     z.busy = true; z.msg = 'Salvo ' + eur(prezzo) + '…'; aggiornaCamInfo();
-    call('aggiungiPezzo', { ordine_id: S.data.ordine.id, socio_id: s.socio_id, per_conto: s.per_conto, prodotto_id: z.tipo, descrizione: p ? p.nome : '', codice: cod, importo: prezzo, forza: !!forza })
+    call('aggiungiPezzo', { ordine_id: S.data.ordine.id, socio_id: s.socio_id, per_conto: s.per_conto, prodotto_id: tipo, descrizione: p ? p.nome : '', codice: cod, importo: prezzo, forza: !!forza })
       .then(function (r) {
         z.busy = false; aggiornaPesata(r);
         if (r.doppione) {
@@ -1060,7 +1070,7 @@ var URL_APP = location.origin + location.pathname;
           z.msg = 'Questo codice è già stato letto' + (r.doppione.nome ? ' per ' + r.doppione.nome : '') + ' (' + eur(r.doppione.importo) + ').';
           suono(false);
         } else {
-          z.doppio = null; z.ultimoOk = cod;
+          z.doppio = null; if (cod) z.ultimoOk = cod;
           var tot = pezziDi(s).reduce(function (a, x) { return a + x.importo; }, 0);
           z.msg = '✓ ' + eur(prezzo) + (p ? ' · ' + p.nome : '') + ' — ' + s.nome + ': ' + eur(tot);
           suono(true);
@@ -1094,12 +1104,23 @@ var URL_APP = location.origin + location.pathname;
       (z.doppio && z.doppio.stesso ? '<div class="small">Il codice inquadrato è quello del pezzo appena aggiunto. Passa al pezzo successivo, oppure:</div>' : '') +
       (z.doppio ? '<button class="btn small ' + (z.doppio.stesso ? 'quiet' : '') + '" data-act="pz-forza">È un altro pezzo uguale: aggiungilo</button>' : '');
   }
+  function selCamTipo() {
+    var prodotti = S.data.prodotti || [], z = statoPz();
+    var ric = prodotti.filter(function (x) { return /ricott/i.test(x.nome); })[0];
+    var def = ric ? ric.id : z.tipo;
+    return '<select id="cam-tipo" style="flex:1 1 120px"><option value="">—</option>' + prodotti.map(function (x) {
+      return '<option value="' + h(x.id) + '"' + (x.id === def ? ' selected' : '') + '>' + h(x.nome + (x.formato ? ' ' + x.formato : '')) + '</option>';
+    }).join('') + '</select>';
+  }
   function apriCamera() {
     if (!selPz()) { toast('Scegli prima il socio'); return; }
     var z = statoPz(); z.msg = ''; z.doppio = null; z.ultimo = ''; z.ultimoOk = '';
     var ov = document.getElementById('cam-ov');
     if (!ov) { ov = document.createElement('div'); ov.id = 'cam-ov'; ov.className = 'cam-ov'; document.body.appendChild(ov); }
-    ov.innerHTML = '<div id="cam-reader"></div><div id="cam-info" class="cam-info"></div><button class="btn wide" data-act="pz-chiudi-cam">Fine, chiudi la fotocamera</button>';
+    ov.innerHTML = '<div id="cam-reader"></div><div id="cam-info" class="cam-info"></div>' +
+      '<div class="cam-info"><div class="small">Pezzo senza prezzo nel codice (es. ricotta):</div><div class="row">' + selCamTipo() +
+      '<input type="text" inputmode="decimal" id="cam-prezzo" placeholder="Prezzo, es. 3,60" style="flex:1 1 110px"><button class="btn small" data-act="cam-add">Aggiungi</button></div></div>' +
+      '<button class="btn wide" data-act="pz-chiudi-cam">Fine, chiudi la fotocamera</button>';
     aggiornaCamInfo();
     caricaLettore().then(function () {
       CAM = new Html5Qrcode('cam-reader', { formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13], verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
@@ -1126,7 +1147,7 @@ var URL_APP = location.origin + location.pathname;
     z.ultimo = c; z.t = Date.now();
     var v = leggiEAN(c);
     if (!v.ok) { z.msg = 'Lettura non riuscita, riprova'; aggiornaCamInfo(); return; }
-    if (v.prezzo === null) { z.msg = 'Questo codice non contiene il prezzo: chiudi e scrivilo a mano.'; suono(false); aggiornaCamInfo(); return; }
+    if (v.prezzo === null) { z.msg = 'Questo codice non contiene il prezzo: scrivilo qui sotto.'; suono(false); aggiornaCamInfo(); var cp = document.getElementById('cam-prezzo'); if (cp) cp.focus(); return; }
     aggiungiPezzo(c, v.prezzo, false);
   }
 
@@ -1399,6 +1420,10 @@ var URL_APP = location.origin + location.pathname;
         var pzv = numIt(document.getElementById('pz-prezzo').value);
         if (!(pzv > 0)) { toast('Scrivi il prezzo del pezzo'); break; }
         aggiungiPezzo('', pzv, false); break;
+      case 'cam-add':
+        var cpz = document.getElementById('cam-prezzo'), cpv = numIt(cpz.value);
+        if (!(cpv > 0)) { toast('Scrivi il prezzo del pezzo'); break; }
+        cpz.value = ''; cpz.blur(); aggiungiPezzo('', cpv, false, document.getElementById('cam-tipo').value); break;
       case 'pz-forza':
         var dz = statoPz().doppio; if (dz) { statoPz().doppio = null; aggiungiPezzo(dz.cod, dz.prezzo, true); }
         break;
