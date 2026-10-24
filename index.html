@@ -191,8 +191,11 @@ td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space:
 .notice { border-radius: 12px; padding: 12px 14px; background: var(--accent-soft); }
 .notice.warn { background: var(--due-soft); color: var(--due); }
 .notice.err { background: var(--bad-soft); color: var(--bad); }
-.cam-ov { position: fixed; left: 0; right: 0; top: 0; z-index: 50; background: #101412; color: #f4f1ea; padding: 12px 12px 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
-#cam-reader { width: 100%; max-width: 480px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; min-height: 160px; }
+.cam-ov { position: fixed; left: 0; right: 0; top: 0; max-height: 100%; max-height: 100dvh; overflow-y: auto; z-index: 50; background: #101412; color: #f4f1ea; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.cam-top { display: flex; align-items: center; gap: 10px; max-width: 480px; margin: 0 auto; width: 100%; }
+.cam-top .grow { flex: 1; min-width: 0; }
+#cam-reader { width: 100%; max-width: 480px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; min-height: 140px; max-height: 42vh; max-height: 42dvh; }
+#cam-reader video { width: 100% !important; max-height: 42vh; max-height: 42dvh; object-fit: cover; display: block; }
 .cam-info { font-size: 1.05rem; display: flex; flex-direction: column; gap: 6px; max-width: 480px; margin: 0 auto; width: 100%; }
 .cam-msg { font-weight: 700; font-size: 1.15rem; }
 .cam-ov.lampo-ok { animation: lampoOk .6s ease-out; }
@@ -1117,8 +1120,10 @@ var URL_APP = location.origin + location.pathname;
   }
   function aggiornaCamInfo() {
     var el = document.getElementById('cam-info'); if (!el) return;
+    var chi = document.getElementById('cam-chi'), sp = selPz();
+    if (chi) chi.innerHTML = 'Pezzi di <b>' + h(sp ? sp.nome : '?') + '</b>';
     var z = statoPz(), s = selPz(), p = (S.data.prodotti || []).filter(function (x) { return x.id === z.tipo; })[0];
-    el.innerHTML = '<div>Pezzi di <b>' + h(s ? s.nome : '?') + '</b>' + (p ? ' · ' + h(p.nome) : '') + '</div>' +
+    el.innerHTML = (p ? '<div class="small">Tipo: ' + h(p.nome) + ' (lo riconosce dal codice, se può)</div>' : '') +
       '<div class="cam-msg' + (z.doppio && !z.doppio.stesso ? ' warn' : '') + '">' + h(z.msg || 'Inquadra il codice a barre dell’etichetta') + '</div>' +
       (z.doppio && z.doppio.stesso ? '<div class="small">Il codice inquadrato è quello del pezzo appena aggiunto. Passa al pezzo successivo, oppure:</div>' : '') +
       (z.doppio ? '<button class="btn small ' + (z.doppio.stesso ? 'quiet' : '') + '" data-act="pz-forza">È un altro pezzo uguale: aggiungilo</button>' : '');
@@ -1137,14 +1142,15 @@ var URL_APP = location.origin + location.pathname;
     if (!S.camHist) { try { history.pushState({ gas: 1, cam: 1 }, ''); S.camHist = true; } catch (e) {} }
     var ov = document.getElementById('cam-ov');
     if (!ov) { ov = document.createElement('div'); ov.id = 'cam-ov'; ov.className = 'cam-ov'; document.body.appendChild(ov); }
-    ov.innerHTML = '<div id="cam-reader"></div><div id="cam-info" class="cam-info"></div>' +
+    ov.innerHTML = '<div class="cam-top"><button class="btn small" data-act="pz-chiudi-cam">‹ Fine</button><div class="grow small" id="cam-chi"></div></div>' +
+      '<div id="cam-reader"></div><div id="cam-info" class="cam-info"></div>' +
       '<div class="cam-info"><div class="small">Pezzo senza prezzo nel codice (es. ricotta):</div><div class="row">' + selCamTipo() +
       '<input type="text" inputmode="decimal" id="cam-prezzo" placeholder="Prezzo, es. 3,60" style="flex:1 1 110px"><button class="btn small" data-act="cam-add">Aggiungi</button></div></div>' +
       '<button class="btn wide" data-act="pz-chiudi-cam">Fine, chiudi la fotocamera</button>';
     aggiornaCamInfo();
     caricaLettore().then(function () {
       CAM = new Html5Qrcode('cam-reader', { formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13], verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
-      return CAM.start({ facingMode: 'environment' }, { fps: 10, qrbox: function (w) { return { width: Math.floor(Math.min(w * 0.9, 340)), height: 120 }; } }, codiceLetto, function () {});
+      return CAM.start({ facingMode: 'environment' }, { fps: 10, aspectRatio: 1.333, qrbox: function (w) { return { width: Math.floor(Math.min(w * 0.9, 340)), height: 120 }; } }, codiceLetto, function () {});
     }).catch(function (e) {
       if (S.camHist) history.back(); else chiudiCamera();
       toast(/permission|notallowed/i.test(String(e)) ? 'Permesso della fotocamera negato: consentilo nelle impostazioni del browser' : (errMsg(e) || 'Fotocamera non disponibile: scrivi il prezzo a mano'));
