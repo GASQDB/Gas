@@ -135,6 +135,33 @@ textarea { min-height: 120px; resize: vertical; }
 .prod { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .prod.has { border-color: var(--accent); background: linear-gradient(var(--accent-soft), var(--accent-soft)) top / 100% 4px no-repeat, var(--surface); }
 .prod.off { opacity: 0.55; }
+/* vista compatta: più prodotti per schermata */
+.compatta .prod { padding: 8px 12px; gap: 6px; border-radius: 10px; }
+.compatta .prod .nome { font-size: 0.97rem; line-height: 1.25; }
+.compatta .prod .small { font-size: 0.8rem; }
+.compatta .step { width: 40px; height: 40px; font-size: 1.25rem; }
+.compatta .stepper { border-width: 1px; border-radius: 10px; }
+.compatta .stepper input { width: 44px; min-height: 40px; font-size: 1.05rem; }
+.compatta .cat { padding-top: 4px; font-size: 0.85rem; }
+.compatta #lista { gap: 6px; }
+.varianti { display: flex; flex-direction: column; gap: 10px; }
+.compatta .varianti { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px 16px; }
+.compatta .varianti .nota-v { grid-column: 1 / -1; }
+.compatta .varianti .nota-v input { min-height: 36px !important; }
+.compatta .qty-line { gap: 8px; flex-wrap: nowrap; }
+.compatta .var-name { font-size: 0.95rem; font-weight: 600; }
+.compatta .varianti .step { width: 36px; height: 36px; }
+.compatta .varianti .stepper input { min-height: 36px; width: 42px; }
+.riga1-in { display: flex; align-items: center; gap: 10px; }
+.riga1-in .grow { flex: 1; min-width: 0; }
+.riga1-in .prezzo { text-align: right; white-space: nowrap; font-size: 0.95rem; }
+.riga1-in .prezzo .small { font-weight: 400; }
+.vista-sw .chip { padding: 6px 12px; min-height: 36px; font-size: 0.85rem; }
+@media (min-width: 1000px) {
+  body.compatta[data-view="ordina"] .app { max-width: 1100px; }
+  body.compatta #lista { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
+  body.compatta #lista .cat, body.compatta #lista .empty { grid-column: 1 / -1; }
+}
 .prod .nome { font-weight: 700; }
 .prod .prezzo { font-weight: 700; }
 .qty-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -376,7 +403,10 @@ var URL_APP = location.origin + location.pathname;
       mostra('<div class="top"><button class="back" data-act="back">‹ Indietro</button></div><div class="notice err">' + h(errMsg(e)) + '</div>');
     });
   }
+  function vistaCompatta() { try { return localStorage.getItem('gas_vista') !== 'grande'; } catch (e) { return true; } }
   function disegna() {
+    document.body.classList.toggle('compatta', vistaCompatta());
+    document.body.setAttribute('data-view', S.view || '');
     var f = { ordini: vOrdini, ordina: vOrdina, conti: vConti, gestione: vGestione, gOrdine: vGOrdine, soci: vSoci, fornitori: vFornitori }[S.view];
     if (!(S.view === 'gOrdine' && S.p && S.p.tab === 'pesata')) chiudiCamera();
     mostra(f());
@@ -483,7 +513,10 @@ var URL_APP = location.origin + location.pathname;
         '<div class="muted small">Per le persone esterne al gruppo: paghi tu al referente anche per loro.</div></div>';
     }
 
-    var cerca = d.prodotti.length > 10 ? '<input type="search" id="cerca" placeholder="Cerca un prodotto…" value="' + h(S.cerca) + '">' : '';
+    var comp = vistaCompatta();
+    var cerca = '<div class="row between" style="align-items:center">' +
+      (d.prodotti.length > 10 ? '<input type="search" id="cerca" placeholder="Cerca un prodotto…" value="' + h(S.cerca) + '" style="flex:1 1 180px">' : '<span></span>') +
+      '<div class="chips vista-sw"><button class="chip small' + (comp ? ' on' : '') + '" data-vista="compatta">Compatta</button><button class="chip small' + (comp ? '' : ' on') + '" data-vista="grande">Grande</button></div></div>';
     var lista = '<div class="stack" id="lista">' + listaProdotti() + '</div>';
 
     var mp = d.mie_pezzi || [];
@@ -506,13 +539,30 @@ var URL_APP = location.origin + location.pathname;
       if (p.categoria && p.categoria !== cat) { cat = p.categoria; out += '<div class="cat">' + h(cat) + '</div>'; }
       var varianti = p.varianti.length ? p.varianti : [''];
       var ha = varianti.some(function (v) { var r = qtaDi(p.id, v); return r && r.quantita > 0; });
+      var comp = vistaCompatta();
+      if (comp && p.disponibile && varianti.length === 1 && !varianti[0]) {
+        // una riga sola: nome e prezzo a sinistra, + e − a destra
+        var r1 = qtaDi(p.id, ''), q1 = r1 ? r1.quantita : 0;
+        var meta = [p.formato, confTxt(p), p.peso_variabile ? 'a peso reale' : ''].filter(Boolean).join(' · ');
+        var ctrl1 = mod
+          ? '<div class="stepper"><button class="step" data-step="-1" data-p="' + h(p.id) + '" data-v="" aria-label="Togli uno">−</button>' +
+            '<input type="number" inputmode="decimal" min="0" step="1" value="' + (q1 || 0) + '" data-qty data-p="' + h(p.id) + '" data-v="" aria-label="Quantità ' + h(p.nome) + '" id="q-' + h(p.id) + '-">' +
+            '<button class="step plus" data-step="1" data-p="' + h(p.id) + '" data-v="" aria-label="Aggiungi uno">+</button></div>'
+          : '<b class="num">' + qt(q1) + ' ' + h(p.unita) + '</b>';
+        var nota1 = (q1 > 0 && mod) ? '<input type="text" class="small" placeholder="Nota (facoltativa)" value="' + h(r1.note || '') + '" data-nota data-p="' + h(p.id) + '" data-v="" style="min-height:36px">' :
+          (r1 && r1.note ? '<div class="muted small">Nota: ' + h(r1.note) + '</div>' : '');
+        out += '<div class="prod riga1' + (ha ? ' has' : '') + '"><div class="riga1-in"><div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
+          '<div class="muted small">' + h(meta) + '</div></div>' +
+          '<div class="prezzo num">' + eur(p.prezzo_unita) + '<div class="muted small">a ' + h(p.unita) + '</div></div>' + ctrl1 + '</div>' + nota1 + '</div>';
+        return;
+      }
       out += '<div class="prod ' + (ha ? 'has ' : '') + (p.disponibile ? '' : 'off') + '">' +
         '<div class="row between" style="align-items:flex-start"><div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
         '<div class="muted small">' + h([p.formato, confTxt(p)].filter(Boolean).join(' · ')) + '</div></div>' +
         '<div class="prezzo num" style="text-align:right">' + eur(p.prezzo_unita) + '<div class="muted small" style="font-weight:400">a ' + h(p.unita) + '</div></div></div>' +
         (p.peso_variabile ? '<div class="muted small">Prezzo indicativo: si paga in base al peso reale.</div>' : '') +
         (!p.disponibile ? '<div class="small"><b>Al momento non disponibile</b></div>' :
-          varianti.map(function (v) {
+          '<div class="varianti">' + varianti.map(function (v) {
             var r = qtaDi(p.id, v), qv = r ? r.quantita : 0;
             var ctrl = mod
               ? '<div class="stepper"><button class="step" data-step="-1" data-p="' + h(p.id) + '" data-v="' + h(v) + '" aria-label="Togli uno">−</button>' +
@@ -521,8 +571,8 @@ var URL_APP = location.origin + location.pathname;
               : '<b class="num">' + qt(qv) + ' ' + h(p.unita) + '</b>';
             var nota = (qv > 0 && mod) ? '<input type="text" class="small" placeholder="Nota (facoltativa), es. ben matura" value="' + h(r.note || '') + '" data-nota data-p="' + h(p.id) + '" data-v="' + h(v) + '" style="min-height:42px">' :
               (r && r.note ? '<div class="muted small">Nota: ' + h(r.note) + '</div>' : '');
-            return '<div class="qty-line">' + (v ? '<span class="var-name">' + h(v) + '</span>' : '<span></span>') + ctrl + '</div>' + nota;
-          }).join('')) +
+            return '<div class="qty-line">' + (v ? '<span class="var-name">' + h(v) + '</span>' : '<span></span>') + ctrl + '</div>' + (nota ? '<div class="nota-v">' + nota + '</div>' : '');
+          }).join('') + '</div>') +
         '</div>';
     });
     return out;
@@ -725,7 +775,8 @@ var URL_APP = location.origin + location.pathname;
   var CAMPI_IMP = [['nome', 'Nome del prodotto', /^\s*(descr|prodott|nome|tipologia|articolo)/i, 'obbligatorio'], ['dettaglio', 'Altra descrizione', /^\s*descr\w*\s*1|dettagl/i, 'aggiunta al nome per distinguere prodotti simili, es. trafila ruvida'], ['dettaglio2', 'Altra descrizione (2)', /^\s*descr\w*\s*[2-9]/i, 'aggiunta anche questa al nome, es. semola integrale'], ['categoria', 'Categoria', /categ|tipo prod|reparto/i, 'per raggruppare i prodotti, facoltativa'], ['codice', 'Codice articolo', /^\s*cod/i, 'aggiunto al nome solo se due prodotti hanno nome e descrizioni identici'],
     ['formato', 'Confezione o formato', /formato|peso|confez|stile/i, 'es. cassa 15 kg, 500 g'],
     ['prezzo', 'Prezzo', /ivato|prezzo|€|euro|listino/i, 'obbligatorio: il prezzo che pagano i soci (prima degli sconti dell\'ordine)'], ['qta_conf', 'Pezzi per cartone', /pezzi|cartone|conf\.|n\. ?pz/i, 'solo se si ordina a cartoni e il prezzo è del singolo pezzo'],
-    ['varianti', 'Varianti', /variet|varian|gusto/i, 'es. varietà di mele, separate da virgola, facoltative']];
+    ['varianti', 'Varianti', /variet|varian|gusto/i, 'es. varietà di mele, separate da virgola, facoltative'],
+    ['tipo_ordine', 'Si ordina a pezzi o a peso', /tipo ordine|si ordina|^unit|pezzo\s*\/\s*peso|peso\s*\/\s*pezzo/i, 'colonna con “pz” o “peso”: “peso” = il socio ordina in kg']];
 
   function tProdotti() {
     var o = S.data.ordine, k = coeff(o.sconti);
@@ -780,7 +831,7 @@ var URL_APP = location.origin + location.pathname;
     var mostra = trovati.slice(0, 50);
     var tabella = '<div class="table-wrap" style="max-height:420px;overflow-y:auto"><table><tr><th>Prodotto</th><th>Confezione</th><th class="r">Prezzo</th></tr>' +
       mostra.map(function (p) {
-        return '<tr><td><b>' + h(p.nome) + '</b>' + (p.varianti ? '<div class="small muted">varianti: ' + h(p.varianti) + '</div>' : '') + '</td><td>' + h(p.formato) + (p.qta_conf !== 1 ? ' · ' + qt(p.qta_conf) + ' pz' : '') + '<div class="small muted">si ordina a ' + h(p.unita) + '</div></td><td class="r">' + eur(p.prezzo) + '</td></tr>';
+        return '<tr><td><b>' + h(p.nome) + '</b>' + (p.varianti ? '<div class="small muted">varianti: ' + h(p.varianti) + '</div>' : '') + '</td><td>' + h(p.formato) + (p.qta_conf !== 1 ? ' · ' + qt(p.qta_conf) + ' pz' : '') + '<div class="small muted">si ordina a ' + h(p.unita) + '</div></td><td class="r">' + eur(p.prezzo) + (p.peso_variabile ? '<div class="small muted">al kg, a peso reale</div>' : '') + '</td></tr>';
       }).join('') + '</table></div>' + (trovati.length > mostra.length ? '<div class="small muted">… e altri ' + (trovati.length - mostra.length) + '</div>' : '');
     var correggi = '<details' + (trovati.length ? '' : ' open') + '><summary>I prodotti non sono giusti? Correggi</summary><div class="stack" style="margin-top:8px">' +
       '<p class="small">Per ogni voce scegli la colonna del foglio da cui prenderla. Accanto a ogni colonna vedi un esempio del suo contenuto.</p>' + origine +
@@ -862,10 +913,16 @@ var URL_APP = location.origin + location.pathname;
       if (!u) {
         var w = formato.toLowerCase().split(/[\s\d]/)[0];
         u = UNITA.indexOf(w) >= 0 ? (w === 'sacchi' ? 'sacco' : w) : (qc > 1 ? 'cartone' : 'pz');
+        var to = g('tipo_ordine').toLowerCase();
+        if (/peso|kg|chil/.test(to)) u = 'kg';
       }
+      // prezzo "13 € al kg": il conto vero si fa sul peso, il prezzo mostrato è solo indicativo
+      var prezzoTesto = g('prezzo');
+      var alKg = /(^|[^a-z])kg\b|al\s*kg|al\s*chil|\/\s*kg/i.test(prezzoTesto) || /prezzo al kg/i.test(formato);
+      if (alKg && !/prezzo al kg/i.test(formato)) formato = formato ? formato + ' · prezzo al kg' : 'prezzo al kg';
       var dett = [g('dettaglio'), g('dettaglio2')].filter(function (d) { return d && normNome(nome).indexOf(normNome(d)) < 0; });
       if (dett.length) nome = bello(nome) + ' – ' + dett.join(', ');
-      return { nome: bello(nome), categoria: bello(g('categoria')), formato: formato, prezzo: numIt(g('prezzo')), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: false, disponibile: true, riga: r };
+      return { nome: bello(nome), categoria: bello(g('categoria')), formato: formato, prezzo: numIt(prezzoTesto), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: alKg, disponibile: true, riga: r };
     }).filter(function (p) { return p.nome && p.prezzo > 0; });
     // prodotti con lo stesso nome e confezione: si distinguono con il codice articolo
     var conta = {};
@@ -936,6 +993,10 @@ var URL_APP = location.origin + location.pathname;
       trovati.forEach(function (p, i) {
         var x = leggiCella(p.riga[c.jq]); if (!(x.q > 0)) return;
         var variante = '', note = '';
+        // "400gr" per un prodotto a kg = 0,4; "5 pezzi", "2 conf", "4 salamelle" = solo il numero
+        var tt = normNome(x.testo || '');
+        if (p.unita === 'kg' && /^(g|gr|grammi|grammo)\b/.test(tt)) { x.q = x.q / 1000; x.testo = ''; }
+        else if (/^(kg|chil|pz|pezz|conf|cad|n|nr|numero)\b|^(confezion|pezzi|pezzo|salamell)/.test(tt) || (tt.length >= 4 && normNome(p.nome).indexOf(tt.slice(0, 5)) === 0)) x.testo = '';
         if (x.testo) {
           var t = normNome(x.testo);
           var vv = (p.varianti ? p.varianti.split(/\s*,\s*/) : []).filter(function (v) { var n = normNome(v); return n.length >= 3 && t && (n === t || t.indexOf(n) === 0 || n.indexOf(t) === 0); });
@@ -1326,6 +1387,7 @@ var URL_APP = location.origin + location.pathname;
     if (ds.gordine) { vai('gOrdine', { id: ds.gordine }); return; }
     if (ds.step) { var inp = t.parentNode.querySelector('input'); cambiaQta(ds.p, ds.v || '', (Number(inp.value) || 0) + Number(ds.step)); return; }
     if (ds.per !== undefined && t.classList.contains('chip')) { S.perConto = ds.per; disegna(); return; }
+    if (ds.vista) { try { localStorage.setItem('gas_vista', ds.vista); } catch (e) {} disegna(); return; }
     if (ds.tab) { S.p.tab = ds.tab; S.conferma = ''; disegna(); return; }
     if (ds.pztogli) {
       call('togliPezzo', S.data.ordine.id, ds.pztogli).then(function (r) { aggiornaPesata(r); disegna(); toast('Pezzo tolto'); }, function (e) { toast(errMsg(e)); });
@@ -1423,7 +1485,7 @@ var URL_APP = location.origin + location.pathname;
         var aggiornati = 0, aggiunti = [];
         nuovi.forEach(function (p) {
           var e = (esistenti[chiaveP(p)] || []).shift();
-          if (e) { ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); p.id = e.id; aggiornati++; }
+          if (e) { ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); if (p.peso_variabile) e.peso_variabile = true; p.id = e.id; aggiornati++; }
           else { p.id = 'n' + Math.random().toString(36).slice(2, 11); aggiunti.push(p); }
         });
         var daImp = righeImport(nuovi, colQ).map(function (x) {
