@@ -235,7 +235,15 @@ td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space:
   -webkit-mask-composite: source-in; mask-image: linear-gradient(#000 35%, transparent), linear-gradient(to right, transparent 10%, #000 55%); mask-composite: intersect; }
 @media (min-width: 760px) { #tema { -webkit-mask-image: linear-gradient(#000 35%, transparent); -webkit-mask-composite: source-over; mask-image: linear-gradient(#000 35%, transparent); mask-composite: add; } }
 .app { position: relative; z-index: 1; }
-@media (prefers-color-scheme: dark) { #tema { opacity: .3; } }
+/* ai lati della pagina: fuori dalla colonna dei contenuti (sul telefono una striscia sottile) */
+#tema-lati { position: fixed; inset: 0; pointer-events: none; z-index: 0; background-repeat: repeat; background-size: 240px 120px; opacity: .4;
+  --lato: max(14px, calc((100vw - 760px) / 2));
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(var(--lato) - 24px), transparent var(--lato), transparent calc(100% - var(--lato)), #000 calc(100% - var(--lato) + 24px), #000 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(var(--lato) - 24px), transparent var(--lato), transparent calc(100% - var(--lato)), #000 calc(100% - var(--lato) + 24px), #000 100%); }
+body.compatta[data-view="ordina"] #tema-lati { --lato: max(14px, calc((100vw - 1140px) / 2)); }
+/* sul telefono i margini sono stretti: lo sfondo si vede, molto tenue, nei bordi e fra un riquadro e l'altro */
+@media (max-width: 759px) { #tema-lati { opacity: .16; background-size: 180px 90px; -webkit-mask-image: none; mask-image: none; } }
+@media (prefers-color-scheme: dark) { #tema { opacity: .3; } #tema-lati { opacity: .22; } }
 select.da-scegliere { border-color: var(--due); box-shadow: 0 0 0 2px var(--due-soft); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-weight: 700; z-index: 30; max-width: calc(100% - 32px); text-align: center; }
 .saving { font-size: 0.85rem; color: var(--muted); }
@@ -421,6 +429,7 @@ var URL_APP = location.origin + location.pathname;
     if (dp >= -7 && dp <= 1) return 'pasqua';
     if (md >= 321 && md <= 620) return 'primavera';
     if (md >= 621 && md <= 922) return 'estate';
+    if (md >= 1024 && md <= 1102) return 'halloween';
     if (md >= 923 && md <= 1130) return 'autunno';
     return 'inverno';
   }
@@ -431,6 +440,7 @@ var URL_APP = location.origin + location.pathname;
     primavera: { nome: 'Primavera', svg: "<g fill='%23f4a6b8'><circle cx='30' cy='30' r='6'/><circle cx='40' cy='30' r='6'/><circle cx='35' cy='22' r='6'/><circle cx='35' cy='38' r='6'/></g><circle cx='35' cy='30' r='4' fill='%23f2c94c'/><g fill='%23b9a7e8'><circle cx='150' cy='70' r='5'/><circle cx='159' cy='70' r='5'/><circle cx='154' cy='63' r='5'/><circle cx='154' cy='77' r='5'/></g><circle cx='154' cy='70' r='3.5' fill='%23f2c94c'/><path d='M90 90q12-22 24-8q-14 4-24 8zM205 40q12-20 22-6q-12 4-22 6z' fill='%237cbf6b'/><circle cx='220' cy='96' r='4' fill='%23f4a6b8'/><circle cx='80' cy='18' r='3' fill='%23b9a7e8'/>" },
     estate: { nome: 'Estate', svg: "<circle cx='40' cy='36' r='14' fill='%23f6c443'/><g stroke='%23f6c443' stroke-width='3' stroke-linecap='round'><path d='M40 12v-6M40 66v-6M16 36h-6M70 36h-6M23 19l-4-4M61 57l-4-4M23 53l-4 4M61 15l-4 4'/></g><ellipse cx='150' cy='60' rx='15' ry='11' fill='%23f7dc5c'/><path d='M150 49q6-8 12-6' fill='none' stroke='%2367a35c' stroke-width='2.5'/><path d='M0 104q15-10 30 0t30 0 30 0 30 0 30 0 30 0 30 0 30 0' fill='none' stroke='%2353a7d8' stroke-width='3'/><circle cx='215' cy='30' r='4' fill='%23f6c443'/>" },
     autunno: { nome: 'Autunno', svg: "<path d='M30 20q22 4 18 30q-26-2-18-30z' fill='%23d9822b'/><path d='M30 20l18 30' stroke='%23a65d1c' stroke-width='1.5'/><path d='M150 54q24 2 20 28q-26 0-20-28z' fill='%23c4472d'/><path d='M150 54l20 28' stroke='%238e2f1c' stroke-width='1.5'/><path d='M210 14q18 6 12 26q-20-4-12-26z' fill='%23e3b23c'/><ellipse cx='95' cy='92' rx='8' ry='9' fill='%23a0682e'/><path d='M86 86h18v-4q-9-6-18 0z' fill='%236b4423'/><path d='M60 70q14 2 12 18q-16-2-12-18z' fill='%23e3b23c'/>" },
+    halloween: { nome: 'Halloween', svg: "<g><ellipse cx='40' cy='42' rx='17' ry='14' fill='%23ec8a2c'/><path d='M32 31q8 6 16 0M40 42v-2' stroke='%23c96d18' stroke-width='2' fill='none'/><rect x='38' y='24' width='4' height='7' rx='1' fill='%235e7a2e'/><path d='M33 40l3-3 3 3zM41 40l3-3 3 3zM34 47q6 4 12 0' fill='%23503018'/></g><path d='M150 28q6-8 12 0q6-8 12 0q-4 2-6 6q-6-4-12 0q-2-4-6-6z' fill='%234b3a5a'/><path d='M200 70q4-6 9 0q5-6 9 0q-3 2-5 5q-4-3-8 0q-2-3-5-5z' fill='%234b3a5a'/><path d='M100 98q0-18 12-18t12 18q-4-3-6 0q-3-3-6 0q-3-3-6 0q-3-3-6 0z' fill='%23f3f1ec' stroke='%23c9c4ba' stroke-width='1'/><circle cx='108' cy='88' r='1.6' fill='%23333'/><circle cx='116' cy='88' r='1.6' fill='%23333'/><g fill='%23ec8a2c'><circle cx='225' cy='20' r='2.5'/><circle cx='80' cy='70' r='2'/></g>" },
     inverno: { nome: 'Inverno', svg: "<g stroke='%237fb2d9' stroke-width='2.5' stroke-linecap='round'><path d='M35 15v30M22 22l26 16M22 38l26-16'/><path d='M150 55v26M139 61l22 14M139 75l22-14'/><path d='M215 22v18M207 26l16 10M207 36l16-10'/><path d='M85 85v16M78 89l14 8M78 97l14-8'/></g>" }
   };
   function temaScelto() { try { return localStorage.getItem('gas_tema') || 'auto'; } catch (e) { return 'auto'; } }
@@ -438,10 +448,12 @@ var URL_APP = location.origin + location.pathname;
     var scelta = temaScelto(), t = scelta === 'auto' ? temaDelGiorno() : scelta;
     var el = document.getElementById('tema');
     if (!el) { el = document.createElement('div'); el.id = 'tema'; el.setAttribute('aria-hidden', 'true'); document.body.insertBefore(el, document.body.firstChild); }
-    if (scelta === 'spento' || !TEMI[t]) { el.style.backgroundImage = 'none'; el.removeAttribute('data-tema'); return; }
+    var lati = document.getElementById('tema-lati');
+    if (!lati) { lati = document.createElement('div'); lati.id = 'tema-lati'; lati.setAttribute('aria-hidden', 'true'); document.body.insertBefore(lati, document.body.firstChild); }
+    if (scelta === 'spento' || !TEMI[t]) { el.style.backgroundImage = lati.style.backgroundImage = 'none'; el.removeAttribute('data-tema'); return; }
     if (el.getAttribute('data-tema') === t) return;
     el.setAttribute('data-tema', t);
-    el.style.backgroundImage = "url(\"data:image/svg+xml," + "<svg xmlns='http://www.w3.org/2000/svg' width='240' height='120'>" + TEMI[t].svg + "</svg>" + "\")";
+    el.style.backgroundImage = lati.style.backgroundImage = "url(\"data:image/svg+xml," + "<svg xmlns='http://www.w3.org/2000/svg' width='240' height='120'>" + TEMI[t].svg + "</svg>" + "\")";
   }
   function sceltaTemaHtml() {
     var scelta = temaScelto(), oggi = TEMI[temaDelGiorno()].nome;
