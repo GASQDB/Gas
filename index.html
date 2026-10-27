@@ -230,6 +230,12 @@ td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space:
 @keyframes lampoOk { 0% { background: #2e9e5b; } 100% { background: #101412; } }
 @keyframes lampoNo { 0%, 40% { background: #c9731f; } 100% { background: #101412; } }
 .cam-msg.warn { color: #ffb86b; }
+#tema { position: absolute; left: 0; right: 0; top: 0; height: 150px; pointer-events: none; z-index: 0; background-repeat: repeat-x; background-position: top center; opacity: .5;
+  -webkit-mask-image: linear-gradient(#000 35%, transparent), linear-gradient(to right, transparent 10%, #000 55%);
+  -webkit-mask-composite: source-in; mask-image: linear-gradient(#000 35%, transparent), linear-gradient(to right, transparent 10%, #000 55%); mask-composite: intersect; }
+@media (min-width: 760px) { #tema { -webkit-mask-image: linear-gradient(#000 35%, transparent); -webkit-mask-composite: source-over; mask-image: linear-gradient(#000 35%, transparent); mask-composite: add; } }
+.app { position: relative; z-index: 1; }
+@media (prefers-color-scheme: dark) { #tema { opacity: .3; } }
 select.da-scegliere { border-color: var(--due); box-shadow: 0 0 0 2px var(--due-soft); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-weight: 700; z-index: 30; max-width: calc(100% - 32px); text-align: center; }
 .saving { font-size: 0.85rem; color: var(--muted); }
@@ -325,7 +331,9 @@ var URL_APP = location.origin + location.pathname;
     t.textContent = msg; t.hidden = false;
     clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 2600);
   }
-  function errMsg(e) { return (e && (e.message || e)) ? String(e.message || e).replace(/^Error:\s*/, '').replace(/^Exception:\s*/, '') : 'Qualcosa non ha funzionato. Riprova.'; }
+  var ERRORI = [];
+  function errMsg(e) { var m = errMsg0(e); try { ERRORI.push(new Date().toTimeString().slice(0, 8) + ' ' + m); if (ERRORI.length > 6) ERRORI.shift(); } catch (x) {} return m; }
+  function errMsg0(e) { return (e && (e.message || e)) ? String(e.message || e).replace(/^Error:\s*/, '').replace(/^Exception:\s*/, '') : 'Qualcosa non ha funzionato. Riprova.'; }
   function copia(testo, fallbackId) {
     var fatto = function () { toast('Copiato'); };
     var ripiego = function () {
@@ -383,6 +391,127 @@ var URL_APP = location.origin + location.pathname;
     nav.innerHTML = '<div class="nav">' + b('ordini', 'Ordini') + b('conti', 'I miei conti') + (ref ? b('gestione', 'Gestione') : '') + '</div>';
   }
 
+  /* ========== chi è nell'app: segnale leggero ogni 90 secondi, solo con la pagina in primo piano ========== */
+  function doveSono() {
+    var t = S.data && S.data.ordine ? S.data.ordine.titolo : '';
+    return { ordini: 'Ordini', ordina: 'ordina: ' + t, conti: 'I miei conti', gestione: 'Gestione', gOrdine: 'gestisce: ' + t, soci: 'Soci e link', fornitori: 'Fornitori' }[S.view] || S.view;
+  }
+  function ping() {
+    if (window.DEMO_CALL || !S.codice || !S.boot) return;
+    try { if (document.visibilityState && document.visibilityState !== 'visible') return; } catch (e) {}
+    call('presenza', { dove: doveSono() }).then(function () {}, function () {});
+  }
+  setInterval(ping, 90000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') ping(); });
+
+  /* ========== temi stagionali: fascia decorativa tenue in alto ========== */
+  function pasqua(y) {   // calcolo gregoriano anonimo
+    var a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+    var hh = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - hh - k) % 7, m = Math.floor((a + 11 * hh + 22 * l) / 451);
+    var mese = Math.floor((hh + l - 7 * m + 114) / 31), giorno = ((hh + l - 7 * m + 114) % 31) + 1;
+    return new Date(y, mese - 1, giorno);
+  }
+  function temaDelGiorno(oggi) {
+    oggi = oggi || new Date();
+    var y = oggi.getFullYear(), md = (oggi.getMonth() + 1) * 100 + oggi.getDate();
+    var gg = function (d) { return Math.round((new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate()) - d) / 86400000); };
+    var dp = gg(pasqua(y));               // giorni da Pasqua (negativo = prima)
+    if (md >= 1201 || md <= 106) return 'natale';
+    if (dp >= -56 && dp <= -43) return 'carnevale';   // fino al sabato grasso ambrosiano
+    if (dp >= -7 && dp <= 1) return 'pasqua';
+    if (md >= 321 && md <= 620) return 'primavera';
+    if (md >= 621 && md <= 922) return 'estate';
+    if (md >= 923 && md <= 1130) return 'autunno';
+    return 'inverno';
+  }
+  var TEMI = {
+    natale: { nome: 'Natale', svg: "<g fill='%232f7d4f'><path d='M30 14l13 24H17z'/><path d='M30 28l17 30H13z'/><path d='M160 52l11 20h-22z'/><path d='M160 64l14 25h-28z'/></g><g fill='%237a4a2a'><rect x='27' y='58' width='6' height='8'/><rect x='157' y='89' width='6' height='7'/></g><g fill='%23c8372d'><circle cx='98' cy='26' r='4.5'/><circle cx='105' cy='31' r='4.5'/><circle cx='218' cy='72' r='4'/><circle cx='75' cy='92' r='3.5'/></g><g fill='%23e2b23a'><path d='M200 14l3 7 8 1-6 5 2 8-7-4-7 4 2-8-6-5 8-1z'/><path d='M100 66l2 5 6 1-4 4 1 6-5-3-5 3 1-6-4-4 6-1z'/></g>" },
+    carnevale: { nome: 'Carnevale', svg: "<g><circle cx='20' cy='20' r='5' fill='%23e8524a'/><circle cx='70' cy='48' r='4' fill='%233f8ad6'/><circle cx='120' cy='18' r='5' fill='%23f2b33d'/><circle cx='170' cy='60' r='4' fill='%2358b368'/><circle cx='215' cy='28' r='5' fill='%23b05cd1'/><circle cx='40' cy='80' r='4' fill='%23f2b33d'/><circle cx='140' cy='92' r='5' fill='%23e8524a'/><circle cx='200' cy='96' r='4' fill='%233f8ad6'/><rect x='90' y='70' width='9' height='5' rx='1' transform='rotate(25 94 72)' fill='%2358b368'/><rect x='30' y='44' width='9' height='5' rx='1' transform='rotate(-30 34 46)' fill='%23b05cd1'/></g><path d='M0 104c20-14 40 14 60 0s40-14 60 0 40 14 60 0 40-14 60 0' fill='none' stroke='%23e8524a' stroke-width='3'/>" },
+    pasqua: { nome: 'Pasqua', svg: "<ellipse cx='40' cy='40' rx='14' ry='19' fill='%23f6c9d0'/><path d='M27 40h26' stroke='%23e58fa0' stroke-width='3'/><ellipse cx='150' cy='64' rx='13' ry='17' fill='%23bfe0f2'/><path d='M138 60l6 6 6-6 6 6 6-6' fill='none' stroke='%236aaed6' stroke-width='2.5'/><ellipse cx='220' cy='30' rx='11' ry='15' fill='%23fbe3a1'/><g fill='%23ffffff' stroke='%23e2b23a' stroke-width='1.5'><circle cx='95' cy='30' r='5'/><circle cx='103' cy='30' r='5'/><circle cx='99' cy='23' r='5'/><circle cx='99' cy='37' r='5'/></g><circle cx='99' cy='30' r='3.5' fill='%23e2b23a'/><path d='M60 100q10-14 20 0M190 104q10-14 20 0' fill='none' stroke='%2367a35c' stroke-width='3'/>" },
+    primavera: { nome: 'Primavera', svg: "<g fill='%23f4a6b8'><circle cx='30' cy='30' r='6'/><circle cx='40' cy='30' r='6'/><circle cx='35' cy='22' r='6'/><circle cx='35' cy='38' r='6'/></g><circle cx='35' cy='30' r='4' fill='%23f2c94c'/><g fill='%23b9a7e8'><circle cx='150' cy='70' r='5'/><circle cx='159' cy='70' r='5'/><circle cx='154' cy='63' r='5'/><circle cx='154' cy='77' r='5'/></g><circle cx='154' cy='70' r='3.5' fill='%23f2c94c'/><path d='M90 90q12-22 24-8q-14 4-24 8zM205 40q12-20 22-6q-12 4-22 6z' fill='%237cbf6b'/><circle cx='220' cy='96' r='4' fill='%23f4a6b8'/><circle cx='80' cy='18' r='3' fill='%23b9a7e8'/>" },
+    estate: { nome: 'Estate', svg: "<circle cx='40' cy='36' r='14' fill='%23f6c443'/><g stroke='%23f6c443' stroke-width='3' stroke-linecap='round'><path d='M40 12v-6M40 66v-6M16 36h-6M70 36h-6M23 19l-4-4M61 57l-4-4M23 53l-4 4M61 15l-4 4'/></g><ellipse cx='150' cy='60' rx='15' ry='11' fill='%23f7dc5c'/><path d='M150 49q6-8 12-6' fill='none' stroke='%2367a35c' stroke-width='2.5'/><path d='M0 104q15-10 30 0t30 0 30 0 30 0 30 0 30 0 30 0 30 0' fill='none' stroke='%2353a7d8' stroke-width='3'/><circle cx='215' cy='30' r='4' fill='%23f6c443'/>" },
+    autunno: { nome: 'Autunno', svg: "<path d='M30 20q22 4 18 30q-26-2-18-30z' fill='%23d9822b'/><path d='M30 20l18 30' stroke='%23a65d1c' stroke-width='1.5'/><path d='M150 54q24 2 20 28q-26 0-20-28z' fill='%23c4472d'/><path d='M150 54l20 28' stroke='%238e2f1c' stroke-width='1.5'/><path d='M210 14q18 6 12 26q-20-4-12-26z' fill='%23e3b23c'/><ellipse cx='95' cy='92' rx='8' ry='9' fill='%23a0682e'/><path d='M86 86h18v-4q-9-6-18 0z' fill='%236b4423'/><path d='M60 70q14 2 12 18q-16-2-12-18z' fill='%23e3b23c'/>" },
+    inverno: { nome: 'Inverno', svg: "<g stroke='%237fb2d9' stroke-width='2.5' stroke-linecap='round'><path d='M35 15v30M22 22l26 16M22 38l26-16'/><path d='M150 55v26M139 61l22 14M139 75l22-14'/><path d='M215 22v18M207 26l16 10M207 36l16-10'/><path d='M85 85v16M78 89l14 8M78 97l14-8'/></g>" }
+  };
+  function temaScelto() { try { return localStorage.getItem('gas_tema') || 'auto'; } catch (e) { return 'auto'; } }
+  function applicaTema() {
+    var scelta = temaScelto(), t = scelta === 'auto' ? temaDelGiorno() : scelta;
+    var el = document.getElementById('tema');
+    if (!el) { el = document.createElement('div'); el.id = 'tema'; el.setAttribute('aria-hidden', 'true'); document.body.insertBefore(el, document.body.firstChild); }
+    if (scelta === 'spento' || !TEMI[t]) { el.style.backgroundImage = 'none'; el.removeAttribute('data-tema'); return; }
+    if (el.getAttribute('data-tema') === t) return;
+    el.setAttribute('data-tema', t);
+    el.style.backgroundImage = "url(\"data:image/svg+xml," + "<svg xmlns='http://www.w3.org/2000/svg' width='240' height='120'>" + TEMI[t].svg + "</svg>" + "\")";
+  }
+  function sceltaTemaHtml() {
+    var scelta = temaScelto(), oggi = TEMI[temaDelGiorno()].nome;
+    var opz = [['auto', 'Automatico (adesso: ' + oggi + ')'], ['spento', 'Nessuna decorazione']].concat(Object.keys(TEMI).map(function (k) { return [k, TEMI[k].nome]; }));
+    return '<label class="f">Decorazioni dell’app<span class="hint">Cambiano da sole con le stagioni e le feste. Valgono solo su questo telefono.</span><select id="tema-scelta">' +
+      opz.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === scelta ? ' selected' : '') + '>' + h(o[1]) + '</option>'; }).join('') + '</select></label>';
+  }
+
+  /* ========== segnala un problema ========== */
+  var VERSIONE_APP = '2026-10-27';
+  function infoTecniche() {
+    var r = [];
+    r.push('Versione app: ' + VERSIONE_APP);
+    r.push('Schermata: ' + doveSono());
+    try { r.push('Indirizzo: ' + location.href.replace(/([?&]c=)[^&]+/, '$1…')); } catch (e) {}
+    try { r.push('Browser: ' + navigator.userAgent); } catch (e) {}
+    try { r.push('Schermo: ' + screen.width + '×' + screen.height + ', finestra ' + innerWidth + '×' + innerHeight); } catch (e) {}
+    r.push('Ruolo: ' + (S.boot && S.boot.me ? S.boot.me.ruolo : '?'));
+    r.push('Ultimi errori: ' + (ERRORI.length ? '\n  ' + ERRORI.join('\n  ') : 'nessuno'));
+    return r.join('\n');
+  }
+  function segnalaHtml() {
+    if (!S.segnala) return '<div class="card stack"><h3>Qualcosa non funziona?</h3><p class="small">Scrivi cosa è successo: la segnalazione arriva a chi gestisce l’app, con i dettagli tecnici già allegati.</p><button class="btn ghost" data-act="segnala-apri">Segnala un problema</button></div>';
+    return '<div class="card stack"><h3>Segnala un problema</h3>' +
+      '<label class="f">Cosa è successo?<span class="hint">Es. “premo + sulle mele e non succede niente”</span><textarea id="segnala-testo" rows="4"></textarea></label>' +
+      '<details><summary class="small">Dettagli tecnici che verranno allegati</summary><pre class="small" style="white-space:pre-wrap;margin-top:6px">' + h(infoTecniche()) + '</pre></details>' +
+      '<div class="row"><button class="btn" data-act="segnala-invia">Invia</button><button class="btn quiet" data-act="segnala-chiudi">Annulla</button></div></div>';
+  }
+
+  /* ========== pannello amministratore: chi è nell'app e segnalazioni ========== */
+  function quandoFa(iso) {
+    if (!iso) return 'mai entrato';
+    var t = new Date(iso), min = Math.round((Date.now() - t) / 60000);
+    if (min < 3) return 'adesso';
+    if (min < 60) return min + ' min fa';
+    var oggi = new Date(); var ieri = new Date(Date.now() - 86400000);
+    var hm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+    if (t.toDateString() === oggi.toDateString()) return 'oggi ' + hm;
+    if (t.toDateString() === ieri.toDateString()) return 'ieri ' + hm;
+    var gg = Math.round((Date.now() - t) / 86400000);
+    return gg < 30 ? gg + ' giorni fa' : t.toLocaleDateString('it-IT');
+  }
+  function statoAppHtml() {
+    var st = S.statoApp;
+    if (!st) return '<div class="card muted" id="stato-app">Carico chi è nell’app…</div>';
+    if (st.errore) return '<div class="card" id="stato-app"><div class="muted small">' + h(st.errore) + '</div></div>';
+    var on = st.soci.filter(function (s) { return s.online; });
+    var mai = st.soci.filter(function (s) { return !s.ultimo; }).length;
+    var lista = '<div class="list">' + st.soci.map(function (s) {
+      return '<div class="li"><div class="grow"><b>' + h(s.nome) + '</b>' + (s.online && s.dove ? '<div class="muted small">' + h(s.dove) + '</div>' : '') + '</div>' +
+        '<span class="pill ' + (s.online ? 'ok' : (s.ultimo ? '' : 'due')) + '">' + (s.online ? 'online' : h(quandoFa(s.ultimo))) + '</span></div>';
+    }).join('') + '</div>';
+    var segn = st.segnalazioni.length ? '<div class="list">' + st.segnalazioni.map(function (x) {
+      return '<div class="li"><div class="grow"><b>' + h(x.nome) + '</b> <span class="muted small">' + h(quandoFa(x.data)) + '</span><div class="small">' + h(x.testo) + '</div>' +
+        (x.inviata !== 'sì' ? '<div class="small" style="color:var(--due)">email ' + h(x.inviata || 'non inviata') + '</div>' : '') + '</div></div>';
+    }).join('') + '</div>' : '<div class="muted small">Nessuna segnalazione.</div>';
+    return '<div class="card stack" id="stato-app"><div class="row between"><h3>Adesso nell’app: ' + on.length + '</h3><button class="btn small quiet" data-act="stato-aggiorna">Aggiorna</button></div>' +
+      '<div class="small">' + (on.length ? on.map(function (s) { return h(s.nome); }).join(', ') : 'Nessuno in questo momento.') + '</div>' +
+      '<details><summary>Ultimo accesso di tutti i soci' + (mai ? ' (' + mai + ' mai entrati)' : '') + '</summary><div style="margin-top:6px">' + lista + '</div></details>' +
+      '<details><summary>Segnalazioni (' + st.segnalazioni.length + ')</summary><div class="stack" style="margin-top:6px">' + segn +
+      '<label class="f">Le segnalazioni arrivano a<span class="hint">vuoto = l’email dell’account Google del GAS</span><input type="email" id="email-segn" value="' + h(st.email) + '" placeholder="nome@gmail.com"></label>' +
+      '<button class="btn small ghost" data-act="email-segn-salva">Salva indirizzo</button></div></details></div>';
+  }
+  function caricaStatoApp() {
+    call('statoApp').then(function (r) { S.statoApp = r; }, function (e) { S.statoApp = { errore: errMsg(e) }; }).then(function () {
+      var el = document.getElementById('stato-app');
+      if (el && S.view === 'gestione') el.outerHTML = statoAppHtml();
+    });
+  }
+
   /* ========== caricamento viste ========== */
   function carica() {
     attesa(); disegnaNav();
@@ -390,7 +519,7 @@ var URL_APP = location.origin + location.pathname;
     if (v === 'ordini') pr = call('avvio').then(function (d) { S.boot = d; S.data = d; });
     else if (v === 'ordina') pr = call('ordine', p.id, p.socio || '').then(function (d) { S.data = d; if (p.perConto !== undefined) S.perConto = p.perConto; });
     else if (v === 'conti') pr = call('conti').then(function (d) { S.data = d; });
-    else if (v === 'gestione') pr = call('gestione').then(function (d) { S.data = d; });
+    else if (v === 'gestione') { S.statoApp = null; pr = call('gestione').then(function (d) { S.data = d; }); }
     else if (v === 'gOrdine') pr = p.id ? Promise.all([call('ordine', p.id), call('soci'), call('fornitori')]).then(function (r) { S.data = r[0]; S.data.soci = r[1]; S.data.fornitori = r[2]; prepProdotti(); }) :
       Promise.all([call('soci'), call('fornitori')]).then(function (r) {
         S.data = { nuovo: true, soci: r[0], fornitori: r[1], ordine: { titolo: '', fornitore: '', fornitore_id: '', chiusura: '', consegna: '', pagamento: 'consegna', sconti: '', note: '' }, prodotti: [] };
@@ -406,6 +535,7 @@ var URL_APP = location.origin + location.pathname;
   function vistaCompatta() { try { return localStorage.getItem('gas_vista') !== 'grande'; } catch (e) { return true; } }
   function disegna() {
     document.body.classList.toggle('compatta', vistaCompatta());
+    applicaTema();
     document.body.setAttribute('data-view', S.view || '');
     var f = { ordini: vOrdini, ordina: vOrdina, conti: vConti, gestione: vGestione, gOrdine: vGOrdine, soci: vSoci, fornitori: vFornitori }[S.view];
     if (!(S.view === 'gOrdine' && S.p && S.p.tab === 'pesata')) chiudiCamera();
@@ -671,7 +801,8 @@ var URL_APP = location.origin + location.pathname;
       '<p class="small">' + (S.boot.me.ha_pin ? 'Hai già un PIN. Puoi cambiarlo qui.' : 'Scegli un PIN da 4 a 8 caratteri (cifre o lettere): ti servirà per entrare con il tuo nome se cambi telefono o perdi il link.') + '</p>' +
       '<label class="f">' + (S.boot.me.ha_pin ? 'Nuovo PIN' : 'PIN') + '<input type="password" id="pin-nuovo" autocomplete="new-password" maxlength="8" placeholder="Es. 2468"></label>' +
       '<label class="f">Ripeti il PIN<input type="password" id="pin-ripeti" autocomplete="new-password" maxlength="8"></label>' +
-      '<button class="btn" data-act="salva-pin">Salva il PIN</button></div></div>';
+      '<button class="btn" data-act="salva-pin">Salva il PIN</button></div>' +
+      '<div class="card stack">' + sceltaTemaHtml() + '</div>' + segnalaHtml() + '</div>';
   }
 
   /* ========== vista: gestione ========== */
@@ -684,7 +815,9 @@ var URL_APP = location.origin + location.pathname;
         (o.stato !== 'bozza' ? '<div class="row between small"><span>' + o.n_partecipanti + ' partecipanti · <b class="num">' + eur(o.totale) + '</b></span>' +
           (o.stato !== 'aperto' ? '<span class="pill ' + (o.incassato >= o.totale - 0.004 ? 'ok' : 'due') + '">incassati ' + eur(o.incassato) + '</span>' : '') + '</div>' : '') + '</div>';
     };
+    if (admin) { if (!S.statoApp) setTimeout(caricaStatoApp, 0); }
     var html = '<div class="top"><span class="eyebrow">Referente</span><h1>Gestione</h1></div><div class="stack-lg">' +
+      (admin ? statoAppHtml() : '') +
       '<div class="row"><button class="btn" data-act="nuovo-ordine">+ Nuovo ordine</button><button class="btn ghost" data-act="fornitori">' + (admin ? 'Fornitori' : 'I miei fornitori') + '</button>' + (admin ? '<button class="btn ghost" data-act="soci">Soci e link</button>' : '') + '</div>';
     gruppi.forEach(function (g) {
       var arr = d.ordini.filter(function (o) { return o.stato === g[0]; });
@@ -1502,6 +1635,20 @@ var URL_APP = location.origin + location.pathname;
             (daImp.length ? ' · ' + (r.importate || daImp.length) + ' righe dei soci caricate' : ''));
         }, function (e) { S.prodDirty = true; disegna(); toast(errMsg(e)); });
         break;
+      case 'segnala-apri': S.segnala = true; disegna(); var st0 = document.getElementById('segnala-testo'); if (st0) st0.focus(); break;
+      case 'segnala-chiudi': S.segnala = false; disegna(); break;
+      case 'segnala-invia':
+        var tx = (document.getElementById('segnala-testo').value || '').trim();
+        if (!tx) { toast('Scrivi in poche parole cosa non va'); break; }
+        t.disabled = true;
+        call('segnala', { testo: tx, info: infoTecniche() }).then(function (r) {
+          S.segnala = false; disegna(); toast(r.inviata ? 'Segnalazione inviata, grazie!' : 'Segnalazione salvata, grazie!');
+        }, function (e) { t.disabled = false; toast(errMsg(e)); });
+        break;
+      case 'stato-aggiorna': S.statoApp = null; var sa = document.getElementById('stato-app'); if (sa) sa.outerHTML = statoAppHtml(); caricaStatoApp(); break;
+      case 'email-segn-salva':
+        call('emailSegnalazioni', document.getElementById('email-segn').value).then(function (r) { S.statoApp = r; toast('Indirizzo salvato'); var el = document.getElementById('stato-app'); if (el) el.outerHTML = statoAppHtml(); }, function (e) { toast(errMsg(e)); });
+        break;
       case 'pz-scan': apriCamera(); break;
       case 'pz-chiudi-cam':
         if (S.camHist) history.back(); else { chiudiCamera(); statoPz().doppio = null; disegna(); }
@@ -1569,6 +1716,7 @@ var URL_APP = location.origin + location.pathname;
       S.prodDirty = true; disegna(); return;
     }
     if (ds.map) { S.imp.mappa[ds.map] = t.value === '' ? '' : +t.value; disegna(); return; }
+    if (t.id === 'tema-scelta') { try { localStorage.setItem('gas_tema', t.value); } catch (e) {} applicaTema(); return; }
     if (t.id === 'pz-socio') { statoPz().sel = t.value; statoPz().doppio = null; statoPz().ultimoOk = ''; statoPz().msg = ''; disegna(); return; }
     if (t.id === 'pz-tipo') { statoPz().tipo = t.value; return; }
     if (t.id === 'pz-scontrino') { call('salvaScontrino', S.data.ordine.id, t.value).then(function (r) { aggiornaPesata(r); disegna(); }, function (e) { toast(errMsg(e)); }); return; }
@@ -1594,7 +1742,7 @@ var URL_APP = location.origin + location.pathname;
     S.codice = codice; attesa();
     call('avvio').then(function (d) {
       memScrivi(codice);
-      S.boot = d; S.data = d; S.view = 'ordini'; S.stack = []; disegna();
+      S.boot = d; S.data = d; S.view = 'ordini'; S.stack = []; disegna(); ping();
     }, function (e) { memTogli(); vAccesso(errMsg(e)); });
   }
   window.GAS_AVVIA = avvia;
