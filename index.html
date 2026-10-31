@@ -279,10 +279,13 @@ var URL_APP = location.origin + location.pathname;
     if (window.DEMO_CALL) return window.DEMO_CALL(nome, [S.codice].concat(args));
     if (window.API_URL) {
       /* pagina ospitata fuori da Google: si parla con Apps Script senza login Google */
-      return fetch(window.API_URL, { method: 'POST', redirect: 'follow', credentials: 'omit',
-        body: JSON.stringify({ nome: nome, args: [S.codice].concat(args), sito: URL_APP }) })
+      var corpo = JSON.stringify({ nome: nome, args: [S.codice].concat(args), sito: URL_APP });
+      var prova = function () { return fetch(window.API_URL, { method: 'POST', redirect: 'follow', credentials: 'omit', body: corpo }); };
+      // se la rete non risponde riprovo da solo una volta, dopo un attimo, prima di mostrare l'errore
+      return prova()
+        .then(null, function () { return new Promise(function (ok) { setTimeout(ok, 1500); }).then(prova); })
         .then(function (r) { if (!r.ok) throw new Error('Il server non risponde. Riprova tra poco.'); return r.json(); },
-              function () { throw new Error('Connessione assente o lenta. Controlla la rete e riprova.'); })
+              function () { throw new Error('Connessione assente o lenta. Se sei collegato al Wi-Fi, prova a spegnerlo e a usare i dati del telefono.'); })
         .then(function (r) { if (!r.ok) throw new Error(r.errore || 'Errore sconosciuto.'); return r.dati; });
     }
     return new Promise(function (ok, ko) {
@@ -1657,6 +1660,7 @@ var URL_APP = location.origin + location.pathname;
         if (p1 !== p2) { toast('I due PIN non coincidono'); break; }
         call('impostaPin', p1).then(function () { S.boot.me.ha_pin = true; toast('PIN salvato'); disegna(); }, function (e) { toast(errMsg(e)); });
         break;
+      case 'riprova': avvia(S.codice); break;
       case 'entra':
         var c = (document.getElementById('codice-in').value || '').trim().toUpperCase();
         if (c) avvia(c);
@@ -1819,7 +1823,14 @@ var URL_APP = location.origin + location.pathname;
     call('avvio').then(function (d) {
       memScrivi(codice);
       S.boot = d; S.data = d; S.view = 'ordini'; S.stack = []; disegna(); ping();
-    }, function (e) { memTogli(); vAccesso(errMsg(e)); });
+    }, function (e) {
+      var m = errMsg(e);
+      // il codice si dimentica solo se è davvero sbagliato, non se manca la rete
+      if (/link non valido|manca il link|disattivato/i.test(m)) { memTogli(); vAccesso(m); return; }
+      document.getElementById('nav').hidden = true;
+      app.innerHTML = '<div class="top"><span class="eyebrow">Gruppo di acquisto</span><h1>Non riesco a collegarmi</h1></div><div class="stack">' +
+        '<div class="notice err">' + h(m) + '</div><button class="btn wide" data-act="riprova">Riprova</button></div>';
+    });
   }
   window.GAS_AVVIA = avvia;
   var cod = (CODICE_URL && CODICE_URL.indexOf('<' + '?') < 0 ? CODICE_URL : '') || memLeggi();
