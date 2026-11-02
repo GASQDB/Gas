@@ -320,6 +320,42 @@ var URL_APP = location.origin + location.pathname;
     var p = String(s).split('-'); if (p.length < 3) return s;
     return +p[2] + ' ' + MESI[+p[1] - 1].slice(0, 3);
   }
+  /* ---- scadenza degli ordini ---- */
+  function oraDi(o) { return o.ora_chiusura && o.ora_chiusura !== '23:59' ? o.ora_chiusura : ''; }
+  function fineOrdine(o) { return dataLunga(o.chiusura) + (oraDi(o) ? ' alle ' + oraDi(o) : ''); }
+  function scadenzaData(o) {
+    if (!o.chiusura) return null;
+    var p = String(o.chiusura).split('-'), hm = String(o.ora_chiusura || '23:59').split(':');
+    return new Date(+p[0], +p[1] - 1, +p[2], +hm[0] || 0, +hm[1] || 0);
+  }
+  /** 'oggi' / 'domani' se l'ordine aperto chiude a breve, altrimenti '' */
+  function chiudeA(o) {
+    var f = scadenzaData(o); if (!f || o.stato !== 'aperto') return '';
+    var ora = new Date(); if (f <= ora) return '';
+    var oggi = new Date(ora.getFullYear(), ora.getMonth(), ora.getDate());
+    var g = Math.round((new Date(f.getFullYear(), f.getMonth(), f.getDate()) - oggi) / 86400000);
+    return g === 0 ? 'oggi' : (g === 1 ? 'domani' : '');
+  }
+  function quandoChiude(o) { var q = chiudeA(o); return q ? q + (oraDi(o) ? ' alle ' + oraDi(o) : '') : ''; }
+  /** promemoria nel calendario del telefono: su iPhone un file .ics, altrove Google Calendar */
+  function ricordami(o) {
+    var f = scadenzaData(o); if (!f) return;
+    var inizio = new Date(f.getTime() - 3600000);
+    var z = function (n) { return ('0' + n).slice(-2); };
+    var fmt = function (d) { return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + 'T' + z(d.getHours()) + z(d.getMinutes()) + '00'; };
+    var titolo = 'Chiude l’ordine ' + o.titolo + ' (GAS)';
+    var dett = 'Ultimo momento per ordinare dall’app del GAS' + (URL_APP ? ': ' + URL_APP : '');
+    if (/iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent) && 'ontouchend' in document) {
+      var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//GAS//app//IT', 'BEGIN:VEVENT', 'UID:gas-' + o.id + '@gasqdb',
+        'DTSTAMP:' + fmt(new Date()), 'DTSTART:' + fmt(inizio), 'DTEND:' + fmt(f), 'SUMMARY:' + titolo, 'DESCRIPTION:' + dett,
+        'BEGIN:VALARM', 'TRIGGER:-P1D', 'ACTION:DISPLAY', 'DESCRIPTION:' + titolo, 'END:VALARM',
+        'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:' + titolo, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+      location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+    } else {
+      window.open('https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(titolo) +
+        '&dates=' + fmt(inizio) + '/' + fmt(f) + '&ctz=Europe/Rome&details=' + encodeURIComponent(dett), '_blank');
+    }
+  }
   var NOMI_STATO = { bozza: 'Bozza', aperto: 'Aperto', chiuso: 'Chiuso', consegnato: 'Consegnato', archiviato: 'Archiviato' };
   function pill(stato) { return '<span class="pill ' + h(stato) + '">' + h(NOMI_STATO[stato] || stato) + '</span>'; }
   function confTxt(p) {
@@ -659,17 +695,22 @@ var URL_APP = location.origin + location.pathname;
     var altri = d.ordini.filter(function (o) { return o.stato !== 'aperto'; });
     var card = function (o) {
       var riga2 = o.stato === 'aperto'
-        ? (o.chiusura ? 'Si ordina fino a <b>' + h(dataLunga(o.chiusura)) + '</b>' : 'Ordine aperto')
+        ? (o.chiusura ? (quandoChiude(o) ? '<b style="color:var(--due)">Chiude ' + h(quandoChiude(o)) + '</b>' : 'Si ordina fino a <b>' + h(fineOrdine(o)) + '</b>') : 'Ordine aperto')
         : (o.consegna ? 'Consegna ' + h(dataLunga(o.consegna)) : '');
       var mio = o.ho_ordinato ? '<span class="pill ok">Il tuo ordine: <span class="num">' + eur(o.mio_totale) + '</span></span>' : (o.stato === 'aperto' ? '<span class="muted small">Non hai ancora ordinato</span>' : '');
       return '<div class="card tap" data-ordine="' + h(o.id) + '" role="button" tabindex="0">' +
         '<div class="row between"><h2 class="grow">' + h(o.titolo) + '</h2>' + pill(o.stato) + '</div>' +
         '<div class="muted small">' + (o.fornitore ? h(o.fornitore) + ' · ' : '') + 'referente ' + h(o.referente) + '</div>' +
-        (riga2 ? '<div>' + riga2 + '</div>' : '') +
+        (riga2 ? '<div class="row between" style="align-items:center"><span>' + riga2 + '</span>' +
+          (o.stato === 'aperto' && o.chiusura ? '<button class="btn small quiet" data-act="ricorda" data-id="' + h(o.id) + '">Ricordamelo</button>' : '') + '</div>' : '') +
         '<div class="row between">' + mio + (o.stato === 'aperto' ? '<span class="btn small">' + (o.ho_ordinato ? 'Modifica' : 'Ordina') + '</span>' : '<span class="btn small quiet">Vedi</span>') + '</div></div>';
     };
+    var urgenti = aperti.filter(function (o) { return chiudeA(o) && !o.ho_ordinato; });
+    var avvisi = urgenti.map(function (o) {
+      return '<div class="notice warn tap" data-ordine="' + h(o.id) + '" role="button" tabindex="0"><b>Chiude ' + h(quandoChiude(o)) + ': ' + h(o.titolo) + '</b><br>Non hai ancora ordinato. Tocca qui per ordinare.</div>';
+    }).join('');
     return '<div class="top"><span class="eyebrow">Gruppo di Acquisto</span><h1>Ciao ' + h(me.nome) + '</h1></div>' +
-      '<div class="stack-lg">' +
+      '<div class="stack-lg">' + avvisi +
       '<div class="stack"><div class="section-title"><h2>Ordini aperti</h2><span class="muted small">' + aperti.length + '</span></div>' +
       (aperti.length ? aperti.map(card).join('') : '<div class="card empty">In questo momento non ci sono ordini aperti.<br>Quando un referente ne apre uno, lo trovi qui.</div>') + '</div>' +
       (altri.length ? '<div class="stack"><div class="section-title"><h2>Chiusi e in consegna</h2></div>' + altri.map(card).join('') + '</div>' : '') +
@@ -703,7 +744,7 @@ var URL_APP = location.origin + location.pathname;
       '<span class="eyebrow">' + h(o.fornitore || 'Ordine') + ' · referente ' + h(o.referente) + '</span>' +
       '<div class="row between"><h1 class="grow">' + h(o.titolo) + '</h1>' + pill(o.stato) + '</div></div>';
     var info = '<div class="card">' +
-      (o.chiusura ? '<div>Si ordina fino a <b>' + h(dataLunga(o.chiusura)) + '</b></div>' : '') +
+      (o.chiusura ? '<div>Si ordina fino a <b>' + h(fineOrdine(o)) + '</b>' + (quandoChiude(o) ? ' <span class="pill due">chiude ' + h(chiudeA(o)) + '</span>' : '') + '</div>' : '') +
       (o.consegna ? '<div>Consegna <b>' + h(dataLunga(o.consegna)) + '</b></div>' : '') +
       '<div>' + (o.pagamento === 'anticipato' ? 'Si paga <b>prima della consegna</b>, al referente.' : 'Si paga <b>alla consegna</b>, al referente.') + '</div>' +
       (o.note ? '<div class="muted">' + h(o.note) + '</div>' : '') + '</div>';
@@ -895,8 +936,14 @@ var URL_APP = location.origin + location.pathname;
           (o.stato !== 'aperto' ? '<span class="pill ' + (o.incassato >= o.totale - 0.004 ? 'ok' : 'due') + '">incassati ' + eur(o.incassato) + '</span>' : '') + '</div>' : '') + '</div>';
     };
     if (admin) { if (!S.statoApp) setTimeout(caricaStatoApp, 0); }
+    var promemoria = d.ordini.filter(function (o) { return o.stato === 'aperto' && chiudeA(o); }).map(function (o) {
+      var mancano = Math.max(0, (d.n_soci || 0) - (o.n_partecipanti || 0));
+      var testo = 'Promemoria: l’ordine ' + o.titolo + ' chiude ' + quandoChiude(o) + '. Chi non ha ancora ordinato può farlo dall’app' + (URL_APP ? ': ' + URL_APP : '') + ' 🙂';
+      return '<div class="notice warn stack"><div><b>' + h(o.titolo) + ' chiude ' + h(quandoChiude(o)) + '</b><br>' + o.n_partecipanti + ' soci hanno ordinato' + (mancano ? ', circa ' + mancano + ' non ancora' : '') + '.</div>' +
+        '<a class="btn small" target="_blank" rel="noopener" href="' + h(linkWA('', testo)) + '">Promemoria su WhatsApp</a></div>';
+    }).join('');
     var html = '<div class="top"><span class="eyebrow">Referente</span><h1>Gestione</h1></div><div class="stack-lg">' +
-      (admin ? statoAppHtml() : '') +
+      promemoria + (admin ? statoAppHtml() : '') +
       '<div class="row"><button class="btn" data-act="nuovo-ordine">+ Nuovo ordine</button><button class="btn ghost" data-act="fornitori">' + (admin ? 'Fornitori' : 'I miei fornitori') + '</button>' + (admin ? '<button class="btn ghost" data-act="soci">Soci e link</button>' : '') + '</div>';
     gruppi.forEach(function (g) {
       var arr = d.ordini.filter(function (o) { return o.stato === g[0]; });
@@ -946,10 +993,12 @@ var URL_APP = location.origin + location.pathname;
       aperto: [['chiuso', c === 'chiuso' ? 'Tocca ancora per chiudere' : 'Chiudi l\'ordine', ''], ['bozza', 'Rimetti in bozza', 'ghost']],
       chiuso: [['consegnato', 'Segna come consegnato', ''], ['aperto', 'Riapri', 'ghost'], ['bozza', 'Rimetti in bozza', 'ghost']],
       consegnato: [['archiviato', 'Archivia', 'ghost']], archiviato: [['consegnato', 'Ripristina', 'ghost']] }[o.stato] || [];
+    var azioni0 = '';
     var avviso = 'Ordine aperto: ' + o.titolo + (o.fornitore ? ' (' + o.fornitore + ')' : '') + '\n' +
-      (o.chiusura ? 'Si ordina fino a ' + dataLunga(o.chiusura) + '\n' : '') + (o.consegna ? 'Consegna ' + dataLunga(o.consegna) + '\n' : '') +
+      (o.chiusura ? 'Si ordina fino a ' + fineOrdine(o) + '\n' : '') + (o.consegna ? 'Consegna ' + dataLunga(o.consegna) + '\n' : '') +
       (o.pagamento === 'anticipato' ? 'Si paga prima della consegna.\n' : '') + 'Ordina dall\'app con il tuo link personale' + (URL_APP ? ': ' + URL_APP : '') + '\nReferente: ' + o.referente;
-    var azioni = '<div class="row">' + az.map(function (a) {
+    if (o.stato === 'chiuso' && o.chiuso_auto) azioni0 = '<div class="notice">Chiuso da solo alla scadenza (' + h(fineOrdine(o)) + '). Per riaprirlo sposta la data in “Dati ordine”; per chi è in ritardo usa “Inserisci l’ordine di un socio”.</div>';
+    var azioni = azioni0 + '<div class="row">' + az.map(function (a) {
       return '<button class="btn small ' + a[2] + '" data-stato="' + a[0] + '">' + h(a[1]) + '</button>';
     }).join('') +
       (o.stato === 'aperto' ? '<a class="btn small ghost" target="_blank" rel="noopener" href="' + h(linkWA('', avviso)) + '">Avviso WhatsApp</a>' : '') +
@@ -977,7 +1026,9 @@ var URL_APP = location.origin + location.pathname;
       '<label class="f">Titolo<input type="text" id="o-titolo" value="' + h(o.titolo) + '" placeholder="Es. Girolomoni ottobre 2026"></label>' +
       '<label class="f">Nome del fornitore sull\'ordine<input type="text" id="o-fornitore" value="' + h(o.fornitore) + '" placeholder="Es. Cooperativa Girolomoni"></label>' +
       '<div class="grid2"><label class="f">Si ordina fino a<input type="date" id="o-chiusura" value="' + h(o.chiusura) + '"></label>' +
-      '<label class="f">Consegna<input type="date" id="o-consegna" value="' + h(o.consegna) + '"></label></div>' +
+      '<label class="f">alle ore<span class="hint">vuoto = a fine giornata</span><input type="time" id="o-ora" value="' + h(oraDi(o)) + '"></label></div>' +
+      '<p class="small muted" style="margin:0">Alla scadenza l’ordine si chiude da solo. Chi arriva tardi può chiederti di inserire il suo ordine (“Inserisci l’ordine di un socio”).</p>' +
+      '<label class="f">Consegna<input type="date" id="o-consegna" value="' + h(o.consegna) + '"></label>' +
       '<label class="f">Quando pagano i soci<select id="o-pag"><option value="consegna"' + (o.pagamento !== 'anticipato' ? ' selected' : '') + '>Alla consegna</option><option value="anticipato"' + (o.pagamento === 'anticipato' ? ' selected' : '') + '>Prima della consegna (il fornitore vuole il pagamento anticipato)</option></select></label>' +
       '<label class="f">Sconti sul listino<span class="hint">In percentuale, separati da +. Es. “1,5 + 1,5 + 5” applica tre sconti in fila. Lascia vuoto se i prezzi sono già quelli finali.</span><input type="text" id="o-sconti" value="' + h(o.sconti) + '" placeholder="Es. 1,5 + 1,5 + 5"></label>' +
       '<label class="f">Note per i soci<textarea id="o-note" placeholder="Es. punto di ritiro, orari, IBAN per il bonifico">' + h(o.note) + '</textarea></label>' +
@@ -1580,9 +1631,9 @@ var URL_APP = location.origin + location.pathname;
   /* ========== eventi ========== */
   function salvaDati() {
     var g = function (id) { var el = document.getElementById(id); return el ? el.value : undefined; };
-    var d = { id: S.data.nuovo ? '' : S.data.ordine.id, fornitore_id: g('o-forn'), titolo: g('o-titolo'), fornitore: g('o-fornitore'), chiusura: g('o-chiusura'), consegna: g('o-consegna'), pagamento: g('o-pag'), sconti: g('o-sconti'), note: g('o-note'), referente_id: g('o-ref') };
+    var d = { id: S.data.nuovo ? '' : S.data.ordine.id, fornitore_id: g('o-forn'), titolo: g('o-titolo'), fornitore: g('o-fornitore'), chiusura: g('o-chiusura'), ora_chiusura: g('o-ora'), consegna: g('o-consegna'), pagamento: g('o-pag'), sconti: g('o-sconti'), note: g('o-note'), referente_id: g('o-ref') };
     call('salvaOrdine', d).then(function (r) {
-      toast('Salvato');
+      toast(r.riaperto ? 'Salvato: con la nuova data l’ordine è di nuovo aperto' : 'Salvato');
       var nuovo = S.data.nuovo;
       S.p = { id: r.id, tab: nuovo ? 'prodotti' : 'dati' }; carica();
     }, function (e) { toast(errMsg(e)); });
@@ -1728,6 +1779,10 @@ var URL_APP = location.origin + location.pathname;
       case 'stato-aggiorna': S.statoApp = null; var sa = document.getElementById('stato-app'); if (sa) sa.outerHTML = statoAppHtml(); caricaStatoApp(); break;
       case 'email-segn-salva':
         call('emailSegnalazioni', document.getElementById('email-segn').value).then(function (r) { S.statoApp = r; toast('Indirizzo salvato'); var el = document.getElementById('stato-app'); if (el) el.outerHTML = statoAppHtml(); }, function (e) { toast(errMsg(e)); });
+        break;
+      case 'ricorda':
+        var or = (S.data.ordini || []).filter(function (x) { return x.id === ds.id; })[0];
+        if (or) ricordami(or);
         break;
       case 'pz-scan': apriCamera(); break;
       case 'pz-chiudi-cam':
