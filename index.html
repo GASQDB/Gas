@@ -1047,7 +1047,7 @@ var URL_APP = location.origin + location.pathname;
     var lista = S.prodEdit.map(function (p, i) {
       var pu = numIt(p.prezzo) * (numIt(p.qta_conf) || 1) * k;
       return '<div class="card"><div class="row between"><div class="grow"><b>' + (i + 1) + '. ' + h(p.nome || 'Nuovo prodotto') + '</b>' + (p.formato || p.varianti ? '<div class="small muted">' + h([p.formato, p.varianti].filter(Boolean).join(' · ')) + '</div>' : '') + '</div><span class="num">' + eur(pu) + ' a ' + h(p.unita || 'pz') + '</span></div>' +
-        '<details' + (p.nome ? '' : ' open') + '><summary>Modifica</summary><div class="stack" style="margin-top:6px">' +
+        '<details data-pd="' + i + '"' + (!p.nome || S.prodAperto === i ? ' open' : '') + '><summary>Modifica</summary><div class="stack" style="margin-top:6px">' +
         '<label class="f">Nome<input type="text" data-pe="nome" data-i="' + i + '" value="' + h(p.nome) + '"></label>' +
         '<div class="grid2"><label class="f">Categoria<input type="text" data-pe="categoria" data-i="' + i + '" value="' + h(p.categoria) + '" placeholder="Es. PASTA"></label>' +
         '<label class="f">Formato<input type="text" data-pe="formato" data-i="' + i + '" value="' + h(p.formato) + '" placeholder="Es. 500 g"></label>' +
@@ -1057,11 +1057,12 @@ var URL_APP = location.origin + location.pathname;
         '<label class="f">Varianti<span class="hint">separate da virgola</span><input type="text" data-pe="varianti" data-i="' + i + '" value="' + h(p.varianti) + '" placeholder="Es. Golden, Opal, Gala"></label></div>' +
         '<label class="check"><input type="checkbox" data-pe="peso_variabile" data-i="' + i + '"' + (p.peso_variabile ? ' checked' : '') + '> Si paga a peso reale (il prezzo è indicativo)</label>' +
         '<label class="check"><input type="checkbox" data-pe="disponibile" data-i="' + i + '"' + (p.disponibile ? ' checked' : '') + '> Disponibile</label>' +
-        '<button class="btn small danger" data-act="p-togli" data-i="' + i + '">Togli prodotto</button></div></details></div>';
+        '<div class="row between"><button class="btn small danger" data-act="p-togli" data-i="' + i + '">Togli prodotto</button>' +
+        '<button class="btn small" data-act="p-salva" data-i="' + i + '"' + (S.prodDirty ? '' : ' disabled') + '>' + (S.prodDirty ? 'Salva' : 'Salvato') + '</button></div></div></details></div>';
     }).join('');
     return '<div class="stack">' + (k !== 1 ? '<div class="notice">Ai prezzi di listino si applicano gli sconti “' + h(o.sconti) + '”: il socio paga il ' + qt(k * 100) + '% del listino.</div>' : '') +
       imp + '<div class="row between"><h2>' + S.prodEdit.length + (S.prodEdit.length === 1 ? ' prodotto' : ' prodotti') + '</h2><button class="btn small quiet" data-act="p-nuovo">+ Aggiungi a mano</button></div>' + lista +
-      (S.prodEdit.length ? '<button class="btn wide" data-act="p-salva"' + (S.prodDirty ? '' : ' disabled') + '>' + (S.prodDirty ? 'Salva i prodotti' : 'Prodotti salvati') + '</button>' : '') + '</div>';
+      (S.prodEdit.length ? '<button class="btn wide" data-act="p-salva"' + (S.prodDirty ? ' style="position:sticky;bottom:84px;z-index:6;box-shadow:0 4px 14px rgba(0,0,0,.25)"' : ' disabled') + '>' + (S.prodDirty ? 'Salva le modifiche' : 'Prodotti salvati') + '</button>' : '') + '</div>';
   }
 
   function impPanel() {
@@ -1723,8 +1724,8 @@ var URL_APP = location.origin + location.pathname;
       case 'fornitori': vai('fornitori', {}); break;
       case 'duplica': call('duplicaOrdine', S.data.ordine.id).then(function (r) { toast('Copia creata in bozza'); vai('gOrdine', { id: r.id, tab: 'dati' }, true); }, function (e) { toast(errMsg(e)); }); break;
       case 'salva-dati': salvaDati(); break;
-      case 'p-nuovo': S.prodEdit.push({ nome: '', categoria: '', formato: '', unita: 'pz', qta_conf: 1, prezzo: 0, varianti: '', peso_variabile: false, disponibile: true }); S.prodDirty = true; disegna(); break;
-      case 'p-togli': S.prodEdit.splice(+ds.i, 1); S.prodDirty = true; disegna(); break;
+      case 'p-nuovo': S.prodAperto = S.prodEdit.length; S.prodEdit.push({ nome: '', categoria: '', formato: '', unita: 'pz', qta_conf: 1, prezzo: 0, varianti: '', peso_variabile: false, disponibile: true }); S.prodDirty = true; disegna(); break;
+      case 'p-togli': S.prodAperto = null; S.prodEdit.splice(+ds.i, 1); S.prodDirty = true; disegna(); break;
       case 'p-salva':
         call('salvaProdotti', S.data.ordine.id, S.prodEdit).then(function (r) { var soci = S.data.soci, forn = S.data.fornitori; S.data = r; S.data.soci = soci; S.data.fornitori = forn; prepProdotti(); disegna(); toast('Prodotti salvati'); }, function (e) { toast(errMsg(e)); });
         break;
@@ -1837,7 +1838,8 @@ var URL_APP = location.origin + location.pathname;
     if (t.dataset.pe !== undefined && t.type !== 'checkbox') {
       var p = S.prodEdit[+t.dataset.i], k = t.dataset.pe;
       p[k] = (k === 'prezzo' || k === 'qta_conf') ? numIt(t.value) : t.value;
-      if (!S.prodDirty) { S.prodDirty = true; var b = document.querySelector('[data-act="p-salva"]'); if (b) { b.disabled = false; b.textContent = 'Salva i prodotti'; } }
+      S.prodAperto = +t.dataset.i;
+      if (!S.prodDirty) { S.prodDirty = true; document.querySelectorAll('[data-act="p-salva"]').forEach(function (b) { b.disabled = false; b.textContent = b.dataset.i !== undefined ? 'Salva' : 'Salva le modifiche'; if (b.dataset.i === undefined) b.style.cssText = 'position:sticky;bottom:84px;z-index:6;box-shadow:0 4px 14px rgba(0,0,0,.25)'; }); }
     }
   });
 
@@ -1846,7 +1848,7 @@ var URL_APP = location.origin + location.pathname;
     if (ds.qty !== undefined) { cambiaQta(ds.p, ds.v || '', t.value); return; }
     if (ds.nota !== undefined) { var r = qtaDi(ds.p, ds.v || ''); if (r) cambiaQta(ds.p, ds.v || '', r.quantita, t.value); return; }
     if (ds.pe !== undefined) {
-      var p = S.prodEdit[+ds.i];
+      var p = S.prodEdit[+ds.i]; S.prodAperto = +ds.i;
       if (t.type === 'checkbox') p[ds.pe] = t.checked; else if (ds.pe === 'prezzo' || ds.pe === 'qta_conf') p[ds.pe] = numIt(t.value); else p[ds.pe] = t.value;
       S.prodDirty = true; disegna(); return;
     }
