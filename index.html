@@ -697,7 +697,7 @@ var URL_APP = location.origin + location.pathname;
       var riga2 = o.stato === 'aperto'
         ? (o.chiusura ? (quandoChiude(o) ? '<b style="color:var(--due)">Chiude ' + h(quandoChiude(o)) + '</b>' : 'Si ordina fino a <b>' + h(fineOrdine(o)) + '</b>') : 'Ordine aperto')
         : (o.consegna ? 'Consegna ' + h(dataLunga(o.consegna)) : '');
-      var mio = o.ho_ordinato ? '<span class="pill ok">Il tuo ordine: <span class="num">' + eur(o.mio_totale) + '</span></span>' : (o.stato === 'aperto' ? '<span class="muted small">Non hai ancora ordinato</span>' : '');
+      var mio = o.ho_ordinato ? '<span class="pill ok">Il tuo ordine: <span class="num">' + conPeso(o.mio_totale, o.mio_da_pesare) + '</span></span>' : (o.stato === 'aperto' ? '<span class="muted small">Non hai ancora ordinato</span>' : '');
       return '<div class="card tap" data-ordine="' + h(o.id) + '" role="button" tabindex="0">' +
         '<div class="row between"><h2 class="grow">' + h(o.titolo) + '</h2>' + pill(o.stato) + '</div>' +
         '<div class="muted small">' + (o.fornitore ? h(o.fornitore) + ' · ' : '') + 'referente ' + h(o.referente) + '</div>' +
@@ -724,14 +724,17 @@ var URL_APP = location.origin + location.pathname;
     var r = S.data.mie_righe.filter(function (x) { return x.prodotto_id === pid && (x.variante || '') === (variante || '') && (x.per_conto || '') === S.perConto; })[0];
     return r ? r : null;
   }
+  /* importo con la parte "da pesare" (fornitori senza importi presunti) */
+  function conPeso(tot, daPesare) { return daPesare ? (tot > 0.004 ? eur(tot) + ' + da pesare' : 'da pesare') : eur(tot); }
   function totaleMio() {
-    var prezzi = {}; S.data.prodotti.forEach(function (p) { prezzi[p.id] = p.pu_esatto || p.prezzo_unita; });
-    var tot = 0, perChi = {};
+    var prezzi = {}, pesare = {}; S.data.prodotti.forEach(function (p) { prezzi[p.id] = p.da_pesare ? 0 : (p.pu_esatto || p.prezzo_unita); if (p.da_pesare) pesare[p.id] = true; });
+    var tot = 0, perChi = {}, daPesare = false;
     S.data.mie_righe.forEach(function (r) {
+      if (pesare[r.prodotto_id] && r.quantita > 0) daPesare = true;
       var v = (prezzi[r.prodotto_id] || 0) * r.quantita; tot += v;
       perChi[r.per_conto || ''] = (perChi[r.per_conto || ''] || 0) + v;
     });
-    return { tot: tot, perChi: perChi };
+    return { tot: tot, perChi: perChi, daPesare: daPesare };
   }
   function vOrdina() {
     var d = S.data, o = d.ordine, mod = d.modificabile;
@@ -803,14 +806,14 @@ var URL_APP = location.origin + location.pathname;
           (r1 && r1.note ? '<div class="muted small">Nota: ' + h(r1.note) + '</div>' : '');
         out += '<div class="prod riga1' + (ha ? ' has' : '') + '"><div class="riga1-in"><div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
           '<div class="muted small">' + h(meta) + '</div></div>' +
-          '<div class="prezzo num">' + eur(p.prezzo_unita) + '<div class="muted small">a ' + h(p.unita) + '</div></div>' + ctrl1 + '</div>' + nota1 + '</div>';
+          '<div class="prezzo num">' + (p.da_pesare ? eur(p.prezzo_kg) + '<div class="muted small">al kg</div>' : eur(p.prezzo_unita) + '<div class="muted small">a ' + h(p.unita) + '</div>') + '</div>' + ctrl1 + '</div>' + nota1 + '</div>';
         return;
       }
       out += '<div class="prod ' + (ha ? 'has ' : '') + (p.disponibile ? '' : 'off') + '">' +
         '<div class="row between" style="align-items:flex-start"><div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
         '<div class="muted small">' + h([p.formato, confTxt(p)].filter(Boolean).join(' · ')) + '</div></div>' +
-        '<div class="prezzo num" style="text-align:right">' + eur(p.prezzo_unita) + '<div class="muted small" style="font-weight:400">a ' + h(p.unita) + '</div></div></div>' +
-        (p.peso_variabile ? '<div class="muted small">Prezzo indicativo: si paga in base al peso reale.</div>' : '') +
+        '<div class="prezzo num" style="text-align:right">' + (p.da_pesare ? eur(p.prezzo_kg) + '<div class="muted small" style="font-weight:400">al kg</div>' : eur(p.prezzo_unita) + '<div class="muted small" style="font-weight:400">a ' + h(p.unita) + '</div>') + '</div></div>' +
+        (p.da_pesare ? '<div class="muted small">Si paga a peso: l\'importo lo sai dopo la pesata.</div>' : p.peso_variabile ? '<div class="muted small">Prezzo indicativo: si paga in base al peso reale.</div>' : '') +
         (!p.disponibile ? '<div class="small"><b>Al momento non disponibile</b></div>' :
           '<div class="varianti">' + varianti.map(function (v) {
             var r = qtaDi(p.id, v), qv = r ? r.quantita : 0;
@@ -831,7 +834,7 @@ var URL_APP = location.origin + location.pathname;
     var nav = document.getElementById('nav'), t = totaleMio(), d = S.data;
     nav.hidden = false;
     nav.innerHTML = '<div class="bar-in"><div><div class="muted small">Totale ' + (d.socio_ordine.id !== S.boot.me.id ? 'di ' + h(d.socio_ordine.nome) : 'del tuo ordine') + '</div>' +
-      '<div class="total-big num">' + eur(t.tot) + '</div></div>' +
+      '<div class="total-big num">' + conPeso(t.tot, t.daPesare) + '</div></div>' +
       '<div style="text-align:right"><div class="saving" id="saving">' + (S.saving ? 'Salvataggio…' : (d.mie_righe.length ? 'Salvato ✓' : '')) + '</div>' +
       '<button class="btn small" data-act="back">Fatto</button></div></div>';
     var el = document.getElementById('riepilogo-mio');
@@ -844,7 +847,7 @@ var URL_APP = location.origin + location.pathname;
       return (Object.keys(gruppi).length > 1 || k ? '<div class="eyebrow" style="margin-top:8px">' + (k ? 'Per ' + h(k) : 'Per ' + (d.socio_ordine.id !== S.boot.me.id ? h(d.socio_ordine.nome) : 'te')) + ' · ' + eur(t.perChi[k]) + '</div>' : '') +
         '<div class="list">' + gruppi[k].map(function (r) {
           var p = prezzi[r.prodotto_id] || { nome: '?', prezzo_unita: 0, unita: '' };
-          return '<div class="li"><div class="grow">' + qt(r.quantita) + ' × ' + h(p.nome) + (r.variante ? ' <b>' + h(r.variante) + '</b>' : '') + (r.note ? '<div class="muted small">' + h(r.note) + '</div>' : '') + '</div><div class="amt num">' + eur((p.pu_esatto || p.prezzo_unita) * r.quantita) + '</div></div>';
+          return '<div class="li"><div class="grow">' + qt(r.quantita) + ' × ' + h(p.nome) + (r.variante ? ' <b>' + h(r.variante) + '</b>' : '') + (r.note ? '<div class="muted small">' + h(r.note) + '</div>' : '') + '</div><div class="amt num">' + (p.da_pesare ? '<span class="muted">da pesare</span>' : eur((p.pu_esatto || p.prezzo_unita) * r.quantita)) + '</div></div>';
         }).join('') + '</div>';
     }).join('');
   }
@@ -895,9 +898,9 @@ var URL_APP = location.origin + location.pathname;
       var dett = v.pagato ? 'Pagato' + (v.metodo ? ' con ' + h(v.metodo.toLowerCase()) : '') + (v.data_pagamento ? ' il ' + h(dataBreve(v.data_pagamento)) : '')
         : (v.stato === 'aperto' ? 'Ordine ancora aperto: l\'importo può cambiare' : 'Da dare a ' + h(v.referente) + (v.pagamento === 'anticipato' ? ' prima della consegna' : ' alla consegna'));
       return '<div class="li"><div class="grow"><b>' + h(v.titolo) + '</b>' + (v.per_conto ? ' <span class="muted">per ' + h(v.per_conto) + '</span>' : '') +
-        '<div class="muted small">' + dett + (v.provvisorio ? ' · importo provvisorio, a peso' : '') + '</div>' +
+        '<div class="muted small">' + dett + (v.da_pesare ? ' · la parte a peso si saprà dopo la pesata' : v.provvisorio ? ' · importo provvisorio, a peso' : '') + '</div>' +
         (v.pezzi && v.pezzi.length ? '<div class="small">' + v.pezzi.map(function (x) { return h(x.descrizione || 'Pezzo') + ' ' + eur(x.importo); }).join(' · ') + '</div>' : '') +
-        '</div><div class="amt num">' + eur(v.importo) + '</div></div>';
+        '</div><div class="amt num">' + conPeso(v.importo, v.da_pesare) + '</div></div>';
     };
     var blocco = function (tit, arr) { return arr.length ? '<div class="card"><h3>' + tit + '</h3><div class="list">' + arr.map(voce).join('') + '</div></div>' : ''; };
     var mov = d.movimenti.length ? '<div class="card"><h3>Crediti e rettifiche</h3><div class="list">' + d.movimenti.map(function (m) {
@@ -1516,12 +1519,12 @@ var URL_APP = location.origin + location.pathname;
       }).join('') + '<button class="no ' + (!p.pagato ? 'on no' : '') + '" data-paga="' + i + '" data-metodo="">Non pagato</button>';
       return '<div class="card"><div class="row between" style="align-items:flex-start"><div class="grow"><h3>' + h(p.nome) + (p.per_conto ? ' <span class="muted" style="font-weight:400">per ' + h(p.per_conto) + '</span>' : '') + '</h3>' +
         '<div class="muted small">' + p.righe.length + ' prodotti' + (p.importo_definitivo !== null ? ' · stimato ' + eur(p.stimato) : '') + (p.abbuono ? ' · sconto ' + eur(p.abbuono) : '') + '</div></div>' +
-        '<div class="total-big num">' + eur(p.dovuto) + '</div></div>' +
+        '<div class="total-big num">' + conPeso(p.dovuto, p.da_pesare) + '</div></div>' +
         (p.peso_variabile && p.importo_definitivo === null ? '<div class="notice warn small">Contiene prodotti a peso: inserisci l\'importo reale dopo la pesata.</div>' : '') +
         '<div class="seg" role="group" aria-label="Pagamento">' + met + '</div>' +
         '<label class="check"><input type="checkbox" data-consegna="' + i + '"' + (p.consegnato ? ' checked' : '') + '> Consegnato</label>' +
         '<details><summary>Dettaglio e importi</summary><div class="stack" style="margin-top:6px"><div class="list">' + p.righe.map(function (r) {
-          return '<div class="li"><div class="grow">' + qt(r.quantita) + ' × ' + h(r.prodotto) + (r.variante ? ' <b>' + h(r.variante) + '</b>' : '') + (r.note ? '<div class="muted small">' + h(r.note) + '</div>' : '') + '</div><div class="amt num">' + eur(r.importo) + '</div></div>';
+          return '<div class="li"><div class="grow">' + qt(r.quantita) + ' × ' + h(r.prodotto) + (r.variante ? ' <b>' + h(r.variante) + '</b>' : '') + (r.note ? '<div class="muted small">' + h(r.note) + '</div>' : '') + '</div><div class="amt num">' + (r.da_pesare ? '<span class="muted">da pesare</span>' : eur(r.importo)) + '</div></div>';
         }).join('') + '</div>' +
         '<div class="grid2"><label class="f">Importo definitivo<span class="hint">vuoto = usa lo stimato</span><input type="text" inputmode="decimal" data-def="' + i + '" value="' + (p.importo_definitivo !== null ? h(String(p.importo_definitivo).replace('.', ',')) : '') + '" placeholder="' + h(String(p.stimato).replace('.', ',')) + '"></label>' +
         '<label class="f">Sconto in €<span class="hint">es. rimborso da un altro ordine</span><input type="text" inputmode="decimal" data-abb="' + i + '" value="' + (p.abbuono ? h(String(p.abbuono).replace('.', ',')) : '') + '"></label></div>' +
@@ -1584,6 +1587,7 @@ var URL_APP = location.origin + location.pathname;
         '<div class="grid2"><label class="f">Pagamento dei soci<select id="' + pre + 'pag"><option value="consegna"' + (f.pagamento !== 'anticipato' ? ' selected' : '') + '>Alla consegna</option><option value="anticipato"' + (f.pagamento === 'anticipato' ? ' selected' : '') + '>Prima della consegna</option></select></label>' +
         '<label class="f">Sconti sul listino<input type="text" id="' + pre + 'sconti" value="' + h(f.sconti) + '" placeholder="Es. 1,5 + 1,5 + 5"></label></div>' +
         '<label class="f">IBAN del fornitore<span class="hint">lo vede solo il referente, non i soci</span><input type="text" id="' + pre + 'iban" value="' + h(f.iban) + '"></label>' +
+        '<label class="check"><input type="checkbox" id="' + pre + 'nostima"' + (f.senza_stima ? ' checked' : '') + '> Prodotti a peso: niente importi presunti<span class="hint" style="display:block">ai soci si mostra il prezzo al kg e “da pesare”: l\'importo compare solo dopo la pesata</span></label>' +
         '<label class="f">Note<span class="hint">ordine minimo, frequenza, tempi di consegna… Le note finiscono anche negli ordini, visibili ai soci.</span><textarea id="' + pre + 'note">' + h(f.note) + '</textarea></label>';
     };
     var nuovo = admin ? '<details class="card"' + (d.fornitori.length ? '' : ' open') + '><summary>+ Aggiungi un fornitore</summary><div class="stack" style="margin-top:8px">' +
@@ -1594,7 +1598,7 @@ var URL_APP = location.origin + location.pathname;
       return '<div class="card' + (f.attivo ? '' : ' muted') + '"><div class="row between" style="align-items:flex-start"><div class="grow"><h3>' + h(f.nome) + '</h3>' +
         '<div class="muted small">' + h([f.vende, f.referente ? 'ref. ' + [f.referente].concat(f.altri || []).join(', ') : 'senza referente'].filter(Boolean).join(' · ')) + '</div></div>' +
         (f.attivo ? '' : '<span class="pill">non attivo</span>') + '</div>' +
-        '<div class="small">' + (f.pagamento === 'anticipato' ? 'Si paga prima della consegna' : 'Si paga alla consegna') + (f.sconti ? ' · sconti ' + h(f.sconti) : '') + ' · ' + f.n_ordini + (f.n_ordini === 1 ? ' ordine' : ' ordini') + '</div>' +
+        '<div class="small">' + (f.pagamento === 'anticipato' ? 'Si paga prima della consegna' : 'Si paga alla consegna') + (f.sconti ? ' · sconti ' + h(f.sconti) : '') + (f.senza_stima ? ' · a peso senza importi presunti' : '') + ' · ' + f.n_ordini + (f.n_ordini === 1 ? ' ordine' : ' ordini') + '</div>' +
         '<div class="row">' + (f.attivo && (admin || String(f.referente_id) === String(S.boot.me.id)) ? '<button class="btn small" data-ordinedaforn="' + h(f.id) + '">Nuovo ordine</button>' : '') + '</div>' +
         '<details><summary>Modifica</summary><div class="stack" style="margin-top:8px">' + campi(pre, f) +
         '<div class="row"><button class="btn small" data-salvaforn="' + h(f.id) + '">Salva</button>' +
@@ -1689,7 +1693,7 @@ var URL_APP = location.origin + location.pathname;
       var gv = function (k) { var el = document.getElementById(pre + k); return el ? el.value : undefined; };
       var box = document.getElementById(pre + 'altri');
       var altri = box ? Array.prototype.map.call(box.querySelectorAll('input:checked'), function (x) { return x.value; }) : undefined;
-      call('salvaFornitore', { id: ds.salvaforn, altri_referenti: altri, nome: gv('nome'), vende: gv('vende'), referente_id: gv('ref'), contatto: gv('contatto'), pagamento: gv('pag'), sconti: gv('sconti'), iban: gv('iban'), note: gv('note') })
+      call('salvaFornitore', { id: ds.salvaforn, altri_referenti: altri, nome: gv('nome'), vende: gv('vende'), referente_id: gv('ref'), contatto: gv('contatto'), pagamento: gv('pag'), sconti: gv('sconti'), iban: gv('iban'), note: gv('note'), senza_stima: (document.getElementById(pre + 'nostima') || {}).checked })
         .then(function (r) { S.data.fornitori = r; disegna(); toast(ds.salvaforn ? 'Fornitore salvato' : 'Fornitore aggiunto'); }, function (e) { toast(errMsg(e)); });
       return;
     }
