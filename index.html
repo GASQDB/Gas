@@ -978,7 +978,7 @@ var URL_APP = location.origin + location.pathname;
   /* ========== vista: gestione di un ordine ========== */
   function prepProdotti() {
     S.prodEdit = (S.data.prodotti || []).map(function (p) {
-      return { id: p.id, categoria: p.categoria, nome: p.nome, formato: p.formato, unita: p.unita, qta_conf: p.qta_conf, prezzo: p.prezzo, varianti: p.varianti.join(', '), peso_variabile: p.peso_variabile, disponibile: p.disponibile };
+      return { id: p.id, categoria: p.categoria, nome: p.nome, formato: p.formato, unita: p.unita, qta_conf: p.qta_conf, prezzo: p.prezzo, varianti: p.varianti.join(', '), peso_variabile: p.peso_variabile, disponibile: p.disponibile, codice: p.codice || '' };
     });
     S.prodDirty = false; S.imp = null; S.conferma = ''; S.fg = null;
   }
@@ -1054,6 +1054,7 @@ var URL_APP = location.origin + location.pathname;
         '<label class="f">Nome<input type="text" data-pe="nome" data-i="' + i + '" value="' + h(p.nome) + '"></label>' +
         '<div class="grid2"><label class="f">Categoria<input type="text" data-pe="categoria" data-i="' + i + '" value="' + h(p.categoria) + '" placeholder="Es. PASTA"></label>' +
         '<label class="f">Formato<input type="text" data-pe="formato" data-i="' + i + '" value="' + h(p.formato) + '" placeholder="Es. 500 g"></label>' +
+        '<label class="f">Codice articolo<span class="hint">del fornitore, esce nel riepilogo</span><input type="text" data-pe="codice" data-i="' + i + '" value="' + h(p.codice || '') + '"></label>' +
         '<label class="f">Si ordina a<input type="text" data-pe="unita" data-i="' + i + '" value="' + h(p.unita) + '" placeholder="pz, cartone, cassa, kg"></label>' +
         '<label class="f">Pezzi (o kg) per confezione<input type="text" inputmode="decimal" data-pe="qta_conf" data-i="' + i + '" value="' + h(qt(p.qta_conf || 1)) + '"></label>' +
         '<label class="f">Prezzo di listino<span class="hint">per pezzo o per kg</span><input type="text" inputmode="decimal" data-pe="prezzo" data-i="' + i + '" value="' + h(String(p.prezzo).replace('.', ',')) + '"></label>' +
@@ -1196,6 +1197,7 @@ var URL_APP = location.origin + location.pathname;
     out.forEach(function (p) { var k = normNome(p.nome) + '|' + normNome(p.formato); conta[k] = (conta[k] || 0) + 1; });
     out.forEach(function (p) {
       var cod = m.codice === undefined || m.codice === '' ? '' : String(p.riga[m.codice] || '').trim();
+      p.codice = cod;
       if (cod && conta[normNome(p.nome) + '|' + normNome(p.formato)] > 1) p.nome += ' (' + cod + ')';
     });
     return out;
@@ -1312,12 +1314,13 @@ var URL_APP = location.origin + location.pathname;
     var d = S.data, r = d.riepilogo || [], tot = r.reduce(function (s, x) { return s + x.importo; }, 0);
     if (!r.length) return '<div class="card empty">Nessun prodotto ordinato finora.</div>';
     var testo = 'Ordine ' + d.ordine.titolo + '\n' + r.map(function (x) {
-      return '- ' + qt(x.quantita) + ' ' + x.unita + ' ' + x.nome + (x.formato ? ' ' + x.formato : '') + (x.variante ? ' (' + x.variante + ')' : '') + (x.qta_conf !== 1 ? ' = ' + qt(x.pezzi) + ' pz' : '');
+      return '- ' + (x.codice ? '[' + x.codice + '] ' : '') + qt(x.quantita) + ' ' + x.unita + ' ' + x.nome + (x.formato ? ' ' + x.formato : '') + (x.variante ? ' (' + x.variante + ')' : '') + (x.qta_conf !== 1 ? ' = ' + qt(x.pezzi) + ' pz' : '');
     }).join('\n') + '\nTotale indicativo: ' + eur(tot);
-    return '<div class="stack"><div class="card"><div class="table-wrap"><table><tr><th>Prodotto</th><th class="r">Q.tà</th><th class="r">Pezzi</th><th class="r">Importo</th></tr>' +
+    var conCod = r.some(function (x) { return x.codice; });
+    return '<div class="stack"><div class="card"><div class="table-wrap"><table><tr>' + (conCod ? '<th>Codice</th>' : '') + '<th>Prodotto</th><th class="r">Q.tà</th><th class="r">Pezzi</th><th class="r">Importo</th></tr>' +
       r.map(function (x) {
-        return '<tr><td>' + h(x.nome) + (x.formato ? ' <span class="muted">' + h(x.formato) + '</span>' : '') + (x.variante ? '<br><b>' + h(x.variante) + '</b>' : '') + '</td><td class="r">' + qt(x.quantita) + ' ' + h(x.unita) + '</td><td class="r">' + qt(x.pezzi) + '</td><td class="r">' + eur(x.importo) + '</td></tr>';
-      }).join('') + '<tr><th>Totale</th><th></th><th></th><th class="r">' + eur(tot) + '</th></tr></table></div></div>' +
+        return '<tr>' + (conCod ? '<td class="num">' + h(x.codice || '') + '</td>' : '') + '<td>' + h(x.nome) + (x.formato ? ' <span class="muted">' + h(x.formato) + '</span>' : '') + (x.variante ? '<br><b>' + h(x.variante) + '</b>' : '') + '</td><td class="r">' + qt(x.quantita) + ' ' + h(x.unita) + '</td><td class="r">' + qt(x.pezzi) + '</td><td class="r">' + eur(x.importo) + '</td></tr>';
+      }).join('') + '<tr>' + (conCod ? '<th></th>' : '') + '<th>Totale</th><th></th><th></th><th class="r">' + eur(tot) + '</th></tr></table></div></div>' +
       '<p class="muted small">Gli importi sono quelli pagati dai soci, già scontati. Per il fornitore conta soprattutto la colonna quantità.</p>' +
       '<button class="btn" data-act="copia-fornitore">Copia l\'ordine per il fornitore</button>' +
       '<textarea id="testo-fornitore" hidden readonly>' + h(testo) + '</textarea></div>';
@@ -1823,7 +1826,7 @@ var URL_APP = location.origin + location.pathname;
         var aggiornati = 0, aggiunti = [];
         nuovi.forEach(function (p) {
           var e = (esistenti[chiaveP(p)] || []).shift();
-          if (e) { ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); if (p.peso_variabile) e.peso_variabile = true; p.id = e.id; aggiornati++; }
+          if (e) { ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); if (p.codice) e.codice = p.codice; if (p.peso_variabile) e.peso_variabile = true; p.id = e.id; aggiornati++; }
           else { p.id = 'n' + Math.random().toString(36).slice(2, 11); aggiunti.push(p); }
         });
         var daImp = righeImport(nuovi, colQ).map(function (x) {
