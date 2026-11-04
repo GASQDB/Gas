@@ -422,7 +422,7 @@ var URL_APP = location.origin + location.pathname;
 
   function disegnaNav() {
     var nav = document.getElementById('nav');
-    var radiceDi = { ordini: 'ordini', ordina: 'ordini', conti: 'conti', gestione: 'gestione', gOrdine: 'gestione', soci: 'gestione', fornitori: 'gestione' };
+    var radiceDi = { ordini: 'ordini', ordina: 'ordini', storico: 'ordini', conti: 'conti', gestione: 'gestione', gOrdine: 'gestione', soci: 'gestione', fornitori: 'gestione' };
     var cur = radiceDi[S.view] || 'ordini';
     /* ogni area ha il suo colore di sfondo; l'ordine aperto da Gestione resta nel colore di Gestione */
     document.body.setAttribute('data-area', S.view === 'ordina' && S.p && S.p.socio ? 'gestione' : cur);
@@ -441,7 +441,7 @@ var URL_APP = location.origin + location.pathname;
   /* ========== chi è nell'app: segnale leggero ogni 90 secondi, solo con la pagina in primo piano ========== */
   function doveSono() {
     var t = S.data && S.data.ordine ? S.data.ordine.titolo : '';
-    return { ordini: 'Ordini', ordina: 'ordina: ' + t, conti: 'I miei conti', gestione: 'Gestione', gOrdine: 'gestisce: ' + t, soci: 'Soci e link', fornitori: 'Fornitori' }[S.view] || S.view;
+    return { ordini: 'Ordini', ordina: 'ordina: ' + t, conti: 'I miei conti', gestione: 'Gestione', gOrdine: 'gestisce: ' + t, soci: 'Soci e link', fornitori: 'Fornitori', storico: 'Ordini passati' }[S.view] || S.view;
   }
   function ping() {
     if (window.DEMO_CALL || !S.codice || !S.boot) return;
@@ -643,6 +643,7 @@ var URL_APP = location.origin + location.pathname;
       });
     else if (v === 'fornitori') pr = Promise.all([call('fornitori'), call('soci')]).then(function (r) { S.data = { fornitori: r[0], soci: r[1] }; });
     else if (v === 'soci') pr = call('soci').then(function (d) { S.data = d; });
+    else if (v === 'storico') pr = call('storico').then(function (d) { S.data = { storico: d }; });
     pr.then(disegna, function (e) {
       mostra('<div class="top"><button class="back" data-act="back">‹ Indietro</button></div><div class="notice err">' + h(errMsg(e)) + '</div>');
     });
@@ -652,7 +653,7 @@ var URL_APP = location.origin + location.pathname;
     document.body.classList.toggle('compatta', vistaCompatta());
     applicaTema();
     document.body.setAttribute('data-view', S.view || '');
-    var f = { ordini: vOrdini, ordina: vOrdina, conti: vConti, gestione: vGestione, gOrdine: vGOrdine, soci: vSoci, fornitori: vFornitori }[S.view];
+    var f = { ordini: vOrdini, ordina: vOrdina, conti: vConti, gestione: vGestione, gOrdine: vGOrdine, soci: vSoci, fornitori: vFornitori, storico: vStorico }[S.view];
     if (!(S.view === 'gOrdine' && S.p && S.p.tab === 'pesata')) chiudiCamera();
     mostra(f());
     if (S.view === 'ordina') aggiornaBarraOrdine();
@@ -714,8 +715,25 @@ var URL_APP = location.origin + location.pathname;
       '<div class="stack"><div class="section-title"><h2>Ordini aperti</h2><span class="muted small">' + aperti.length + '</span></div>' +
       (aperti.length ? aperti.map(card).join('') : '<div class="card empty">In questo momento non ci sono ordini aperti.<br>Quando un referente ne apre uno, lo trovi qui.</div>') + '</div>' +
       (altri.length ? '<div class="stack"><div class="section-title"><h2>Chiusi e in consegna</h2></div>' + altri.map(card).join('') + '</div>' : '') +
+      '<button class="btn ghost wide" data-act="storico">Ordini passati</button>' +
       '<div class="small muted" style="text-align:center;padding-top:8px">Non sei ' + h(me.nome) + '? <button class="back" style="display:inline;min-height:0;padding:0" data-act="esci">Esci</button></div>' +
       '</div>';
+  }
+
+  /* ========== vista: ordini passati ========== */
+  function vStorico() {
+    var arr = S.data.storico || [];
+    var anno = null, out = '';
+    arr.forEach(function (o) {
+      var data = o.consegna || o.chiusura || '', a = data.slice(0, 4);
+      if (a && a !== anno) { anno = a; out += '<div class="cat">' + h(a) + '</div>'; }
+      out += '<div class="card tap" data-ordine="' + h(o.id) + '" role="button" tabindex="0"><div class="row between"><h3 class="grow">' + h(o.titolo) + '</h3>' +
+        (o.ho_ordinato ? '<b class="num">' + conPeso(o.mio_totale, o.mio_da_pesare) + '</b>' : '') + '</div>' +
+        '<div class="muted small">' + (o.fornitore ? h(o.fornitore) + ' · ' : '') + 'referente ' + h(o.referente) + (data ? ' · ' + h(dataLunga(data)) : '') + '</div></div>';
+    });
+    return '<div class="top"><button class="back" data-act="back">‹ Ordini</button><h1>Ordini passati</h1></div><div class="stack-lg">' +
+      '<p class="muted">Gli ordini finiti e archiviati dal referente. Tocca un ordine per vedere cosa avevi preso.</p>' +
+      '<div class="stack">' + (out || '<div class="card empty">Non ci sono ancora ordini passati.</div>') + '</div></div>';
   }
 
   /* ========== vista: ordina ========== */
@@ -1310,6 +1328,30 @@ var URL_APP = location.origin + location.pathname;
       '</div>';
   }
 
+  /* chi ha ordinato un prodotto: il referente può correggere le quantità quando sul portale manca qualcosa */
+  function chiHtml(x, ri) {
+    var chi = x.chi || [], d = S.data;
+    if (!chi.length) return '';
+    var k = x.prodotto_id + '|' + (x.variante || '');
+    var lista = chi.map(function (c, ci) {
+      var ctrl = d.modificabile
+        ? '<div class="stepper"><button class="step" data-fq="' + ri + '|' + ci + '" data-d="-1" aria-label="Togli uno">−</button><span class="num" style="min-width:2.2em;text-align:center;display:inline-block">' + qt(c.quantita) + '</span><button class="step plus" data-fq="' + ri + '|' + ci + '" data-d="1" aria-label="Aggiungi uno">+</button></div>'
+        : '<b class="num">' + qt(c.quantita) + '</b>';
+      return '<div class="li" style="align-items:center"><div class="grow">' + h(c.nome) + (c.per_conto ? ' <span class="muted">per ' + h(c.per_conto) + '</span>' : '') + '</div>' + ctrl + '</div>';
+    }).join('');
+    return '<details data-fk="' + h(k) + '"' + (S.fAperto === k ? ' open' : '') + ' style="position:sticky;left:0;max-width:min(520px,calc(100vw - 72px))"><summary class="small">Chi l\'ha ordinato (' + chi.length + ')</summary><div class="list" style="margin-top:4px">' + lista + '</div>' +
+      (d.modificabile ? '<button class="btn small danger" style="margin-top:6px" data-fmanca="' + ri + '">Manca: togli a tutti</button>' : '') + '</details>';
+  }
+  function cambiaChi(ri, lista, msg) {
+    var x = S.data.riepilogo[ri], o = S.data.ordine;
+    S.fAperto = x.prodotto_id + '|' + (x.variante || '');
+    Promise.all(lista.map(function (c) {
+      return call('salvaRiga', { ordine_id: o.id, prodotto_id: x.prodotto_id, variante: x.variante || '', per_conto: c.per_conto, quantita: c.nuova, note: c.nuova > 0 ? c.note : '', socio_id: c.socio_id });
+    })).then(function () { return call('ordine', o.id); }).then(function (r) {
+      ['riepilogo', 'paganti', 'pezzi', 'prodotti'].forEach(function (k) { if (r[k] !== undefined) S.data[k] = r[k]; });
+      disegna(); if (msg) toast(msg);
+    }, function (e) { toast(errMsg(e)); disegna(); });
+  }
   function tFornitore() {
     var d = S.data, r = d.riepilogo || [], tot = r.reduce(function (s, x) { return s + x.importo; }, 0);
     if (!r.length) return '<div class="card empty">Nessun prodotto ordinato finora.</div>';
@@ -1318,10 +1360,12 @@ var URL_APP = location.origin + location.pathname;
     }).join('\n') + '\nTotale indicativo: ' + eur(tot);
     var conCod = r.some(function (x) { return x.codice; });
     return '<div class="stack"><div class="card"><div class="table-wrap"><table><tr>' + (conCod ? '<th>Codice</th>' : '') + '<th>Prodotto</th><th class="r">Q.tà</th><th class="r">Pezzi</th><th class="r">Importo</th></tr>' +
-      r.map(function (x) {
-        return '<tr>' + (conCod ? '<td class="num">' + h(x.codice || '') + '</td>' : '') + '<td>' + h(x.nome) + (x.formato ? ' <span class="muted">' + h(x.formato) + '</span>' : '') + (x.variante ? '<br><b>' + h(x.variante) + '</b>' : '') + '</td><td class="r">' + qt(x.quantita) + ' ' + h(x.unita) + '</td><td class="r">' + qt(x.pezzi) + '</td><td class="r">' + eur(x.importo) + '</td></tr>';
+      r.map(function (x, ri) {
+        return '<tr>' + (conCod ? '<td class="num">' + h(x.codice || '') + '</td>' : '') + '<td>' + h(x.nome) + (x.formato ? ' <span class="muted">' + h(x.formato) + '</span>' : '') + (x.variante ? '<br><b>' + h(x.variante) + '</b>' : '') + '</td><td class="r">' + qt(x.quantita) + ' ' + h(x.unita) + '</td><td class="r">' + qt(x.pezzi) + '</td><td class="r">' + eur(x.importo) + '</td></tr>' +
+          (x.chi && x.chi.length ? '<tr><td colspan="' + (conCod ? 5 : 4) + '" style="padding-top:0">' + chiHtml(x, ri) + '</td></tr>' : '');
       }).join('') + '<tr>' + (conCod ? '<th></th>' : '') + '<th>Totale</th><th></th><th></th><th class="r">' + eur(tot) + '</th></tr></table></div></div>' +
-      '<p class="muted small">Gli importi sono quelli pagati dai soci, già scontati. Per il fornitore conta soprattutto la colonna quantità.</p>' +
+      '<p class="muted small">Gli importi sono quelli pagati dai soci, già scontati. Per il fornitore conta soprattutto la colonna quantità.' +
+      (d.modificabile ? ' Se sul portale un prodotto manca o ce n\'è meno, tocca “Chi l\'ha ordinato” e correggi le quantità dei soci: i loro ordini e i conti si aggiornano subito.' : '') + '</p>' +
       '<button class="btn" data-act="copia-fornitore">Copia l\'ordine per il fornitore</button>' +
       '<textarea id="testo-fornitore" hidden readonly>' + h(testo) + '</textarea></div>';
   }
@@ -1724,6 +1768,19 @@ var URL_APP = location.origin + location.pathname;
     if (ds.demochi) { if (window.DEMO_SCEGLI) window.DEMO_SCEGLI(ds.demochi); avvia(ds.demochi); return; }
     if (ds.nav) { radice(ds.nav); return; }
     if (ds.ordine) { S.perConto = ''; vai('ordina', { id: ds.ordine }); return; }
+    if (ds.fq) {
+      var fq = ds.fq.split('|'), fx = S.data.riepilogo[+fq[0]], fc = fx.chi[+fq[1]];
+      fc.nuova = Math.max(0, fc.quantita + Number(ds.d));
+      cambiaChi(+fq[0], [fc], fc.nuova === 0 ? 'Tolto a ' + fc.nome : 'Ora ' + fc.nome + ' ne ha ' + qt(fc.nuova));
+      return;
+    }
+    if (ds.fmanca !== undefined) {
+      var mx = S.data.riepilogo[+ds.fmanca];
+      if (S.conferma !== 'manca' + ds.fmanca) { S.conferma = 'manca' + ds.fmanca; t.textContent = 'Sicuro? Tocca di nuovo per togliere ' + mx.nome + ' a ' + mx.chi.length + (mx.chi.length === 1 ? ' socio' : ' soci'); return; }
+      S.conferma = '';
+      cambiaChi(+ds.fmanca, mx.chi.map(function (c) { c.nuova = 0; return c; }), mx.nome + ' tolto dagli ordini dei soci');
+      return;
+    }
     if (ds.gordine) { vai('gOrdine', { id: ds.gordine }); return; }
     if (ds.step) { var inp = t.parentNode.querySelector('input'); cambiaQta(ds.p, ds.v || '', (Number(inp.value) || 0) + Number(ds.step)); return; }
     if (ds.per !== undefined && t.classList.contains('chip')) { S.perConto = ds.per; disegna(); return; }
@@ -1796,6 +1853,7 @@ var URL_APP = location.origin + location.pathname;
       case 'altra-persona': var a = document.getElementById('altra'); a.hidden = false; document.getElementById('altra-nome').focus(); break;
       case 'altra-ok': var n = document.getElementById('altra-nome').value.trim(); if (n) { S.perConto = n; disegna(); } break;
       case 'nuovo-ordine': vai('gOrdine', { tab: 'dati' }); break;
+      case 'storico': vai('storico', {}); break;
       case 'soci': vai('soci', {}); break;
       case 'fornitori': vai('fornitori', {}); break;
       case 'duplica': call('duplicaOrdine', S.data.ordine.id).then(function (r) { toast('Copia creata in bozza'); vai('gOrdine', { id: r.id, tab: 'dati' }, true); }, function (e) { toast(errMsg(e)); }); break;
