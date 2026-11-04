@@ -980,7 +980,7 @@ var URL_APP = location.origin + location.pathname;
     S.prodEdit = (S.data.prodotti || []).map(function (p) {
       return { id: p.id, categoria: p.categoria, nome: p.nome, formato: p.formato, unita: p.unita, qta_conf: p.qta_conf, prezzo: p.prezzo, varianti: p.varianti.join(', '), peso_variabile: p.peso_variabile, disponibile: p.disponibile };
     });
-    S.prodDirty = false; S.imp = null; S.conferma = '';
+    S.prodDirty = false; S.imp = null; S.conferma = ''; S.fg = null;
   }
   function coeff(sconti) { var k = 1; String(sconti || '').split(/[+;]/).forEach(function (x) { x = x.trim().replace(',', '.'); if (x) k *= 1 - (parseFloat(x) || 0) / 100; }); return k; }
   function numIt(v) { var s = String(v === undefined || v === null ? '' : v).replace(/€|\s/g, ''); if (s.indexOf(',') >= 0 && s.indexOf('.') >= 0) s = s.replace(/\./g, '').replace(',', '.'); else s = s.replace(',', '.'); var n = parseFloat(s); return isNaN(n) ? 0 : n; }
@@ -1518,7 +1518,7 @@ var URL_APP = location.origin + location.pathname;
         return '<button class="' + (p.pagato && p.metodo === m ? 'on' : '') + '" data-paga="' + i + '" data-metodo="' + h(m) + '">' + h(m) + '</button>';
       }).join('') + '<button class="no ' + (!p.pagato ? 'on no' : '') + '" data-paga="' + i + '" data-metodo="">Non pagato</button>';
       return '<div class="card"><div class="row between" style="align-items:flex-start"><div class="grow"><h3>' + h(p.nome) + (p.per_conto ? ' <span class="muted" style="font-weight:400">per ' + h(p.per_conto) + '</span>' : '') + '</h3>' +
-        '<div class="muted small">' + p.righe.length + ' prodotti' + (p.importo_definitivo !== null ? ' · stimato ' + eur(p.stimato) : '') + (p.abbuono ? ' · sconto ' + eur(p.abbuono) : '') + '</div></div>' +
+        '<div class="muted small">' + (p.righe.length ? p.righe.length + ' prodotti' + (p.importo_definitivo !== null ? ' · stimato ' + eur(p.stimato) : '') : 'importo inserito dal referente') + (p.abbuono ? ' · sconto ' + eur(p.abbuono) : '') + '</div></div>' +
         '<div class="total-big num">' + conPeso(p.dovuto, p.da_pesare) + '</div></div>' +
         (p.peso_variabile && p.importo_definitivo === null ? '<div class="notice warn small">Contiene prodotti a peso: inserisci l\'importo reale dopo la pesata.</div>' : '') +
         '<div class="seg" role="group" aria-label="Pagamento">' + met + '</div>' +
@@ -1535,7 +1535,76 @@ var URL_APP = location.origin + location.pathname;
     return '<div class="stack"><div class="card"><div class="row between"><span>Totale ordine</span><b class="num">' + eur(tot) + '</b></div>' +
       '<div class="row between"><span>Incassato</span><b class="num">' + eur(inc) + '</b></div>' +
       '<div class="row between"><span>Mancano</span><span class="pill ' + (tot - inc > 0.004 ? 'due' : 'ok') + ' num">' + eur(tot - inc) + '</span></div></div>' +
-      (righe || '<div class="card empty">Nessuno ha ancora ordinato.</div>') + socio + '</div>';
+      cartaHtml() + (righe || '<div class="card empty">Nessuno ha ancora ordinato.</div>') + socio + '</div>';
+  }
+
+  /* ---------- importi da un foglio di carta (es. totali del pollo) ---------- */
+  function leggiTotali(testo) {
+    var out = [];
+    String(testo || '').replace(/\r/g, '').split('\n').forEach(function (riga) {
+      var t = riga.replace(/€|eur(o)?\b/gi, ' ');
+      if (/^\s*(tot|somma)/i.test(t)) return;
+      var m = t.match(/(\d+)\s*[.,]\s*(\d{1,2})(?!\d)/);
+      if (!m) return;
+      var nome = normNome(t.slice(0, m.index)).replace(/(\s*\d+)+$/, '').trim();
+      if (!/[a-z]/.test(nome)) return;
+      var dec = m[2].length === 1 ? m[2] + '0' : m[2];
+      out.push({ testo: t.slice(0, m.index).trim().replace(/[\s:=-]+$/, ''), nome: nome, importo: parseFloat(m[1] + '.' + dec), socio_id: abbinaSocio(nome), auto: true });
+    });
+    out.forEach(function (r) { r.auto = !!r.socio_id; });
+    return out;
+  }
+  function abbinaSocio(nome) {
+    var soci = (S.data.soci || []).filter(function (s) { return s.attivo; });
+    var esatti = soci.filter(function (s) { return normNome(s.nome) === nome || (s.alias || []).map(normNome).indexOf(nome) >= 0; });
+    if (esatti.length === 1) return esatti[0].id;
+    var primo = nome.split(' ')[0];
+    var simili = soci.filter(function (s) { return normNome(s.nome).split(' ')[0] === primo; });
+    return simili.length === 1 ? simili[0].id : '';
+  }
+  function cartaHtml() {
+    var d = S.data, fg = S.fg;
+    var intro = '<p class="small muted">Per gli ordini a peso con i totali scritti dal fornitore. Una riga per socio, es. “Olga 73,96”. ' +
+      'Puoi scriverle, incollare il testo copiato dalla foto del foglio (su iPhone tieni premuto sul testo della foto, su Android Google Lens → Testo) oppure il testo preparato da Claude. ' +
+      'Se un socio compare due volte, gli importi si sommano.</p>';
+    if (!fg || !fg.righe) {
+      return '<details class="card"' + (fg ? ' open' : '') + '><summary>Importi da un foglio di carta</summary><div class="stack" style="margin-top:6px">' + intro +
+        '<textarea id="fg-testo" rows="7" placeholder="Esterina 108,02&#10;Anna 64,01&#10;…">' + h((fg && fg.testo) || '') + '</textarea>' +
+        '<label class="f">Totale scritto sul foglio<span class="hint">facoltativo, ma serve a scoprire un numero letto male</span><input type="text" inputmode="decimal" id="fg-tot" value="' + h((fg && fg.totale) || '') + '" placeholder="Es. 969,18"></label>' +
+        '<button class="btn" data-act="fg-leggi">Leggi gli importi</button></div></details>';
+    }
+    var soci = (d.soci || []).filter(function (s) { return s.attivo; });
+    var somma = 0, mancano = 0, presi = {}, perSocio = {};
+    fg.righe.forEach(function (r) {
+      if (r.socio_id === '-') return;
+      somma += r.importo;
+      if (!r.socio_id) { mancano++; return; }
+      presi[r.socio_id] = true; perSocio[r.socio_id] = (perSocio[r.socio_id] || 0) + r.importo;
+    });
+    var righe = fg.righe.map(function (r, i) {
+      var opz = '<option value="">— scegli il socio —</option><option value="-"' + (r.socio_id === '-' ? ' selected' : '') + '>Ignora questa riga</option>' +
+        soci.map(function (s) { return '<option value="' + h(s.id) + '"' + (String(s.id) === String(r.socio_id) ? ' selected' : '') + '>' + h(s.nome) + '</option>'; }).join('');
+      return '<div class="li" style="flex-wrap:wrap;gap:6px"><div class="grow" style="min-width:110px"><b>' + h(r.testo) + '</b>' + (r.socio_id && r.socio_id !== '-' ? '' : r.socio_id === '-' ? '<div class="small muted">ignorata</div>' : '<div class="small" style="color:var(--due)">nome non riconosciuto</div>') + '</div>' +
+        '<select data-fgs="' + i + '" style="flex:1 1 140px">' + opz + '</select>' +
+        '<input type="text" inputmode="decimal" data-fgi="' + i + '" value="' + h(String(r.importo.toFixed(2)).replace('.', ',')) + '" style="width:96px;text-align:right"></div>';
+    }).join('');
+    var tot = numIt(fg.totale), controllo = '';
+    if (fg.totale) {
+      var diff = Math.round((tot - somma) * 100) / 100;
+      controllo = Math.abs(diff) < 0.005 ? '<div class="notice">✓ La somma fa <b>' + eur(somma) + '</b>, come il totale del foglio.</div>'
+        : '<div class="notice warn">La somma fa <b>' + eur(somma) + '</b>, il foglio dice <b>' + eur(tot) + '</b>: ' + (diff > 0 ? 'mancano ' : 'ci sono ' ) + eur(Math.abs(diff)) + (diff > 0 ? '' : ' in più') + '. Controlla le cifre lette male.</div>';
+    } else controllo = '<div class="notice">Somma degli importi: <b>' + eur(somma) + '</b>.</div>';
+    var nomiSoci = {}; soci.forEach(function (s) { nomiSoci[s.id] = s.nome; });
+    var doppi = Object.keys(perSocio).filter(function (sid) { return fg.righe.filter(function (r) { return String(r.socio_id) === String(sid); }).length > 1; });
+    var fuori = (d.paganti || []).filter(function (p) { return !p.per_conto && !presi[p.socio_id] && p.righe.length; }).map(function (p) { return p.nome; });
+    return '<div class="card stack"><h3>Importi da un foglio di carta</h3>' +
+      '<div class="list">' + righe + '</div>' + controllo +
+      (doppi.length ? '<div class="small">' + doppi.map(function (sid) { return h(nomiSoci[sid] || '?') + ': in totale ' + eur(perSocio[sid]); }).join(' · ') + '</div>' : '') +
+      (mancano ? '<div class="notice warn">' + mancano + (mancano === 1 ? ' riga senza socio' : ' righe senza socio') + ': scegli il socio o “Ignora questa riga”.</div>' : '') +
+      (fuori.length ? '<div class="notice warn small">Hanno ordinato nell\'app ma non sono nel foglio: <b>' + h(fuori.join(', ')) + '</b>. Il loro importo resta com\'è.</div>' : '') +
+      '<p class="small muted">I nomi che abbini a mano vengono ricordati per la prossima volta.</p>' +
+      '<div class="row"><button class="btn" data-act="fg-salva"' + (mancano ? ' disabled' : '') + '>Conferma e salva ' + Object.keys(perSocio).length + ' importi</button>' +
+      '<button class="btn quiet" data-act="fg-modifica">Modifica il testo</button><button class="btn quiet" data-act="fg-annulla">Annulla</button></div></div>';
   }
 
   /* ========== fornitori ========== */
@@ -1806,6 +1875,26 @@ var URL_APP = location.origin + location.pathname;
         break;
       case 'pz-copia': copia(document.getElementById('pz-testo').value, 'pz-testo'); break;
       case 'copia-fornitore': copia(document.getElementById('testo-fornitore').value, 'testo-fornitore'); break;
+      case 'fg-leggi':
+        var fgt = document.getElementById('fg-testo').value, fgtot = document.getElementById('fg-tot').value.trim();
+        var fgr = leggiTotali(fgt);
+        if (!fgr.length) { toast('Non trovo righe con nome e importo, es. “Olga 73,96”'); S.fg = { testo: fgt, totale: fgtot }; break; }
+        S.fg = { testo: fgt, totale: fgtot, righe: fgr }; disegna(); break;
+      case 'fg-modifica': S.fg = { testo: S.fg.testo, totale: S.fg.totale }; disegna(); break;
+      case 'fg-annulla': S.fg = null; disegna(); break;
+      case 'fg-salva':
+        var lista = [], alias = [];
+        S.fg.righe.forEach(function (r) {
+          if (!r.socio_id || r.socio_id === '-') return;
+          lista.push({ socio_id: r.socio_id, importo: r.importo });
+          if (!r.auto) alias.push({ socio_id: r.socio_id, alias: r.nome });
+        });
+        call('importiDaFoglio', S.data.ordine.id, lista, alias).then(function (r) {
+          S.data.paganti = r.paganti; S.fg = null;
+          alias.forEach(function (a) { var so = (S.data.soci || []).filter(function (x) { return String(x.id) === String(a.socio_id); })[0]; if (so) { so.alias = (so.alias || []).concat([a.alias]); } });
+          disegna(); toast('Salvati ' + r.salvati + ' importi: i soci li vedono in “I miei conti”');
+        }, function (e) { toast(errMsg(e)); });
+        break;
       case 'salva-importi':
         var i = +ds.i, pp = S.data.paganti[i];
         call('salvaEsito', { ordine_id: S.data.ordine.id, socio_id: pp.socio_id, per_conto: pp.per_conto,
@@ -1851,6 +1940,8 @@ var URL_APP = location.origin + location.pathname;
     var t = ev.target, ds = t.dataset;
     if (ds.qty !== undefined) { cambiaQta(ds.p, ds.v || '', t.value); return; }
     if (ds.nota !== undefined) { var r = qtaDi(ds.p, ds.v || ''); if (r) cambiaQta(ds.p, ds.v || '', r.quantita, t.value); return; }
+    if (ds.fgs !== undefined) { var fr = S.fg.righe[+ds.fgs]; fr.socio_id = t.value; fr.auto = false; disegna(); return; }
+    if (ds.fgi !== undefined) { S.fg.righe[+ds.fgi].importo = Math.round(numIt(t.value) * 100) / 100; disegna(); return; }
     if (ds.pe !== undefined) {
       var p = S.prodEdit[+ds.i]; S.prodAperto = +ds.i;
       if (t.type === 'checkbox') p[ds.pe] = t.checked; else if (ds.pe === 'prezzo' || ds.pe === 'qta_conf') p[ds.pe] = numIt(t.value); else p[ds.pe] = t.value;
