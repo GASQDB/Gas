@@ -1129,6 +1129,8 @@ var URL_APP = location.origin + location.pathname;
         '<label class="f">Link del foglio Google<span class="hint">Apri il foglio del fornitore in Google Fogli, copia l\'indirizzo dalla barra del browser (o da Condividi → Copia link) e incollalo qui.</span>' +
         '<input type="text" id="imp-link" inputmode="url" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/d/…"></label>' +
         '<button class="btn" data-act="imp-link">Leggi il foglio</button>' +
+        '<label class="f">Oppure carica un file<span class="hint">PDF fatto da Excel o da un programma (non foto o scansioni), Excel o CSV dal telefono o dal PC</span>' +
+        '<input type="file" id="imp-file" accept=".pdf,.xlsx,.xls,.csv,.ods,application/pdf"></label>' +
         '<details><summary>Oppure copia e incolla le righe</summary><div class="stack" style="margin-top:6px">' +
         '<p class="small">Seleziona nel foglio le righe dei prodotti, con la riga dei titoli, copia e incolla qui sotto. Funziona anche con i file Excel.</p>' +
         '<textarea id="imp-testo" placeholder="Incolla qui le righe copiate dal foglio"></textarea>' +
@@ -1152,7 +1154,7 @@ var URL_APP = location.origin + location.pathname;
     var mostra = trovati.slice(0, 50);
     var tabella = '<div class="table-wrap" style="max-height:420px;overflow-y:auto"><table><tr><th>Prodotto</th><th>Confezione</th><th class="r">Prezzo</th></tr>' +
       mostra.map(function (p) {
-        return '<tr><td><b>' + h(p.nome) + '</b>' + (p.varianti ? '<div class="small muted">varianti: ' + h(p.varianti) + '</div>' : '') + '</td><td>' + h(p.formato) + (p.qta_conf !== 1 ? ' · ' + qt(p.qta_conf) + ' pz' : '') + '<div class="small muted">si ordina a ' + h(p.unita) + '</div></td><td class="r">' + eur(p.prezzo) + (p.peso_variabile ? '<div class="small muted">al kg, a peso reale</div>' : '') + '</td></tr>';
+        return '<tr><td><b>' + h(p.nome) + '</b>' + (p.varianti ? '<div class="small muted">varianti: ' + h(p.varianti) + '</div>' : '') + (p.contenuto ? '<div class="small">dentro (si possono escludere): ' + h(p.contenuto.split('\n').join(', ')) + '</div>' : '') + '</td><td>' + h(p.formato) + (p.qta_conf !== 1 ? ' · ' + qt(p.qta_conf) + ' pz' : '') + '<div class="small muted">si ordina a ' + h(p.unita) + '</div></td><td class="r">' + eur(p.prezzo) + (p.peso_variabile ? '<div class="small muted">al kg, a peso reale</div>' : '') + '</td></tr>';
       }).join('') + '</table></div>' + (trovati.length > mostra.length ? '<div class="small muted">… e altri ' + (trovati.length - mostra.length) + '</div>' : '');
     var correggi = '<details' + (trovati.length ? '' : ' open') + '><summary>I prodotti non sono giusti? Correggi</summary><div class="stack" style="margin-top:8px">' +
       '<p class="small">Per ogni voce scegli la colonna del foglio da cui prenderla. Accanto a ogni colonna vedi un esempio del suo contenuto.</p>' + origine +
@@ -1195,6 +1197,83 @@ var URL_APP = location.origin + location.pathname;
     var im = S.imp;
     im.righe = im.tutte.slice(im.start);
     im.mappa = im.intest ? indovinaMappa(im.righe[0]) : { nome: 0 };
+    if (im.mappa.nome === undefined) im.mappa.nome = 0;   // es. listini con "ORTAGGI" come titolo della prima colonna
+  }
+  /* ---- file caricato: PDF (testo, con le colonne ricostruite dalle posizioni) o Excel/CSV ---- */
+  function caricaPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve();
+    return new Promise(function (ok, ko) {
+      var sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      sc.onload = function () { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; ok(); };
+      sc.onerror = function () { ko(new Error('Non riesco a caricare il lettore di PDF: controlla la connessione e riprova.')); };
+      document.head.appendChild(sc);
+    });
+  }
+  function leggiFile(file) {
+    var nome = file.name || '', pdf = /\.pdf$/i.test(nome) || file.type === 'application/pdf';
+    toast('Leggo il file…');
+    var fr = new FileReader();
+    fr.onload = function () {
+      var buf = fr.result;
+      var pr = pdf ? caricaPdfJs().then(function () { return righeDaPdf(buf); })
+        : caricaXlsx().then(function () {
+          var wb = XLSX.read(buf, { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]];
+          return XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }).filter(function (r) { return r.some(function (c) { return String(c).trim(); }); });
+        });
+      pr.then(function (righe) {
+        if (!righe.length) { toast(pdf ? 'Nel PDF non c\'è testo da leggere: forse è una foto o una scansione' : 'Il file è vuoto'); return; }
+        preparaImport(righe, null); disegna(); toast('Letto: ' + righe.length + ' righe');
+      }, function (e) { toast(errMsg(e)); });
+    };
+    fr.onerror = function () { toast('Non riesco ad aprire il file'); };
+    fr.readAsArrayBuffer(file);
+  }
+  function righeDaPdf(buf) {
+    return pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise.then(function (doc) {
+      var pagine = [];
+      for (var n = 1; n <= doc.numPages; n++) pagine.push(doc.getPage(n).then(function (pg) { return pg.getTextContent(); }));
+      return Promise.all(pagine);
+    }).then(function (cont) {
+      var tutte = [];
+      cont.forEach(function (c) {
+        // 1) pezzi di testo raggruppati per riga (stessa altezza)
+        var pezzi = c.items.filter(function (it) { return it.str && it.str.trim(); })
+          .map(function (it) { return { x: it.transform[4], y: it.transform[5], w: it.width, t: it.str }; });
+        pezzi.sort(function (a, b) { return b.y - a.y || a.x - b.x; });
+        var righe = [];
+        pezzi.forEach(function (p) {
+          var r = righe[righe.length - 1];
+          if (r && Math.abs(r.y - p.y) < 3) r.p.push(p); else righe.push({ y: p.y, p: [p] });
+        });
+        // 2) dentro la riga, uno spazio largo separa le celle
+        righe.forEach(function (r) {
+          r.p.sort(function (a, b) { return a.x - b.x; });
+          var celle = [];
+          r.p.forEach(function (p) {
+            var u = celle[celle.length - 1];
+            if (u && p.x - u.fine < 7) { u.t += (p.x - u.fine > 1.5 ? ' ' : '') + p.t; u.fine = p.x + p.w; }
+            else celle.push({ x: p.x, fine: p.x + p.w, t: p.t });
+          });
+          tutte.push(celle);
+        });
+      });
+      // 3) le colonne si allineano ai titoli (la riga con "prezzo")
+      var ti = -1;
+      for (var i = 0; i < tutte.length; i++) if (tutte[i].length >= 2 && tutte[i].some(function (c) { return /prezz|€|euro/i.test(c.t); }) && !tutte[i].some(function (c) { return /\d[.,]\d/.test(c.t); })) { ti = i; break; }
+      if (ti < 0) return tutte.map(function (r) { return r.map(function (c) { return c.t.trim(); }); });
+      var col = tutte[ti].map(function (c) { return c.x; });
+      return tutte.slice(ti).map(function (r, k) {
+        if (!k) return r.map(function (c) { return c.t.trim(); });
+        var out = col.map(function () { return ''; });
+        r.forEach(function (c) {
+          var j = 0;
+          for (var m = 0; m < col.length; m++) if (col[m] <= c.x + 15) j = m;
+          out[j] = out[j] ? out[j] + ' ' + c.t.trim() : c.t.trim();
+        });
+        return out;
+      });
+    });
   }
   function leggiDaLink(link, scheda) {
     toast('Lettura del foglio…');
@@ -1243,8 +1322,20 @@ var URL_APP = location.origin + location.pathname;
       if (alKg && !/prezzo al kg/i.test(formato)) formato = formato ? formato + ' · prezzo al kg' : 'prezzo al kg';
       var dett = [g('dettaglio'), g('dettaglio2')].filter(function (d) { return d && normNome(nome).indexOf(normNome(d)) < 0; });
       if (dett.length) nome = bello(nome) + ' – ' + dett.join(', ');
-      return { nome: bello(nome), categoria: bello(g('categoria')), formato: formato, prezzo: numIt(prezzoTesto), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: alKg, disponibile: true, riga: r };
-    }).filter(function (p) { return p.nome && p.prezzo > 0; });
+      var nonOrd = r.some(function (c) { return /non\s*ordinabil/i.test(String(c)); });
+      return { nome: bello(nome), categoria: bello(g('categoria')), formato: formato, prezzo: numIt(prezzoTesto), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: alKg, disponibile: true, riga: r, nonOrd: nonOrd };
+    }).filter(function (p) { return p.nome && (p.prezzo > 0 || p.nonOrd); });
+    // righe "NON ORDINABILI": sono il contenuto della cassetta che le precede (il socio potrà escluderle)
+    var cassa = null, tenuti = [];
+    out.forEach(function (p) {
+      if (!p.nonOrd) { tenuti.push(p); if (/cassett|cesto|box/i.test(p.nome + ' ' + p.unita)) cassa = p; return; }
+      var dove = cassa || tenuti[tenuti.length - 1];
+      if (!dove) return;
+      var voce = p.nome.charAt(0).toUpperCase() + p.nome.slice(1);
+      dove.contenuto = dove.contenuto ? dove.contenuto + '\n' + voce : voce;
+      if (!/cassett|cesto|box/i.test(dove.unita)) dove.unita = 'cassetta';
+    });
+    out = tenuti;
     // prodotti con lo stesso nome e confezione: si distinguono con il codice articolo
     var conta = {};
     out.forEach(function (p) { var k = normNome(p.nome) + '|' + normNome(p.formato); conta[k] = (conta[k] || 0) + 1; });
@@ -1954,13 +2045,13 @@ var URL_APP = location.origin + location.pathname;
         var aggiornati = 0, aggiunti = [];
         nuovi.forEach(function (p) {
           var e = (esistenti[chiaveP(p)] || []).shift();
-          if (e) { ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); if (p.codice) e.codice = p.codice; if (p.peso_variabile) e.peso_variabile = true; p.id = e.id; aggiornati++; }
+          if (e) { ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); if (p.codice) e.codice = p.codice; if (p.contenuto) e.contenuto = p.contenuto; if (p.peso_variabile) e.peso_variabile = true; p.id = e.id; aggiornati++; }
           else { p.id = 'n' + Math.random().toString(36).slice(2, 11); aggiunti.push(p); }
         });
         var daImp = righeImport(nuovi, colQ).map(function (x) {
           return { prodotto_id: nuovi[x.pi].id, socio_id: x.socio_id, per_conto: x.per_conto, variante: x.variante, quantita: x.quantita, note: x.note };
         });
-        nuovi.forEach(function (p) { delete p.riga; });
+        nuovi.forEach(function (p) { delete p.riga; delete p.nonOrd; });
         S.prodEdit = S.prodEdit.concat(aggiunti); S.imp = null;
         var oid = S.data.ordine.id;
         call('salvaProdotti', oid, S.prodEdit).then(function (r) {
@@ -2071,6 +2162,7 @@ var URL_APP = location.origin + location.pathname;
     var t = ev.target, ds = t.dataset;
     if (ds.qty !== undefined) { cambiaQta(ds.p, ds.v || '', t.value); return; }
     if (ds.nota !== undefined) { var r = qtaDi(ds.p, ds.v || ''); if (r) cambiaQta(ds.p, ds.v || '', r.quantita, t.value); return; }
+    if (t.id === 'imp-file' && t.files && t.files[0]) { leggiFile(t.files[0]); return; }
     if (ds.fgs !== undefined) { var fr = S.fg.righe[+ds.fgs]; fr.socio_id = t.value; fr.auto = false; disegna(); return; }
     if (ds.fgi !== undefined) { S.fg.righe[+ds.fgi].importo = Math.round(numIt(t.value) * 100) / 100; disegna(); return; }
     if (ds.pe !== undefined) {
