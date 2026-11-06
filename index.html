@@ -90,6 +90,11 @@ h3 { font-size: 1.05rem; font-weight: 600; }
 
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .card.tap { cursor: pointer; }
+.card.con-img { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "testa img" "resto resto"; column-gap: 12px; row-gap: 10px; }
+.ord-testa { grid-area: testa; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ord-resto { grid-area: resto; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ord-img { grid-area: img; width: 68px; height: 68px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
+@media (min-width: 700px) { .card.con-img { grid-template-areas: "testa img" "resto img"; } .ord-img { width: 170px; height: 124px; align-self: center; } }
 .card.tap:hover { border-color: var(--accent); }
 .section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 8px; }
 
@@ -703,12 +708,13 @@ var URL_APP = location.origin + location.pathname;
         ? (o.chiusura ? (quandoChiude(o) ? '<b style="color:var(--due)">Chiude ' + h(quandoChiude(o)) + '</b>' : 'Si ordina fino a <b>' + h(fineOrdine(o)) + '</b>') : 'Ordine aperto')
         : (o.consegna ? 'Consegna ' + h(dataLunga(o.consegna)) : '');
       var mio = o.ho_ordinato ? '<span class="pill ok">Il tuo ordine: <span class="num">' + conPeso(o.mio_totale, o.mio_da_pesare) + '</span></span>' : (o.stato === 'aperto' ? '<span class="muted small">Non hai ancora ordinato</span>' : '');
-      return '<div class="card tap" data-ordine="' + h(o.id) + '" role="button" tabindex="0">' +
+      var img = o.immagine ? '<img class="ord-img" src="' + h(urlImg(o.immagine)) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '';
+      return '<div class="card tap' + (img ? ' con-img' : '') + '" data-ordine="' + h(o.id) + '" role="button" tabindex="0">' + (img ? '<div class="ord-testa">' : '') +
         '<div class="row between"><h2 class="grow">' + h(o.titolo) + '</h2>' + pill(o.stato) + '</div>' +
-        '<div class="muted small">' + (o.fornitore ? h(o.fornitore) + ' · ' : '') + 'referente ' + h(o.referente) + '</div>' +
+        '<div class="muted small">' + (o.fornitore ? h(o.fornitore) + ' · ' : '') + 'referente ' + h(o.referente) + '</div>' + (img ? '</div>' + img + '<div class="ord-resto">' : '') +
         (riga2 ? '<div class="row between" style="align-items:center"><span>' + riga2 + '</span>' +
           (o.stato === 'aperto' && o.chiusura ? '<button class="btn small quiet" data-act="ricorda" data-id="' + h(o.id) + '">Ricordamelo</button>' : '') + '</div>' : '') +
-        '<div class="row between">' + mio + (o.stato === 'aperto' ? '<span class="btn small">' + (o.ho_ordinato ? 'Modifica' : 'Ordina') + '</span>' : '<span class="btn small quiet">Vedi</span>') + '</div></div>';
+        '<div class="row between">' + mio + (o.stato === 'aperto' ? '<span class="btn small">' + (o.ho_ordinato ? 'Modifica' : 'Ordina') + '</span>' : '<span class="btn small quiet">Vedi</span>') + '</div>' + (img ? '</div>' : '') + '</div>';
     };
     var urgenti = aperti.filter(function (o) { return chiudeA(o) && !o.ho_ordinato; });
     var avvisi = urgenti.map(function (o) {
@@ -747,6 +753,7 @@ var URL_APP = location.origin + location.pathname;
     return r ? r : null;
   }
   /* importo con la parte "da pesare" (fornitori senza importi presunti) */
+  function urlImg(id) { return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w400'; }
   function conPeso(tot, daPesare) { return daPesare ? (tot > 0.004 ? eur(tot) + ' + da pesare' : 'da pesare') : eur(tot); }
   function totaleMio() {
     var prezzi = {}, pesare = {}; S.data.prodotti.forEach(function (p) { prezzi[p.id] = p.da_pesare ? 0 : (p.pu_esatto || p.prezzo_unita); if (p.da_pesare) pesare[p.id] = true; });
@@ -1086,6 +1093,11 @@ var URL_APP = location.origin + location.pathname;
       '<label class="f">Quando pagano i soci<select id="o-pag"><option value="consegna"' + (o.pagamento !== 'anticipato' ? ' selected' : '') + '>Alla consegna</option><option value="anticipato"' + (o.pagamento === 'anticipato' ? ' selected' : '') + '>Prima della consegna (il fornitore vuole il pagamento anticipato)</option></select></label>' +
       '<label class="f">Sconti sul listino<span class="hint">In percentuale, separati da +. Es. “1,5 + 1,5 + 5” applica tre sconti in fila. Lascia vuoto se i prezzi sono già quelli finali.</span><input type="text" id="o-sconti" value="' + h(o.sconti) + '" placeholder="Es. 1,5 + 1,5 + 5"></label>' +
       '<label class="f">Note per i soci<textarea id="o-note" placeholder="Es. punto di ritiro, orari, IBAN per il bonifico">' + h(o.note) + '</textarea></label>' +
+      (d.nuovo ? '<p class="small muted" style="margin:0">Dopo aver creato l’ordine potrai aggiungere un’immagine (logo del fornitore o disegno del prodotto).</p>' :
+        '<div style="display:flex;flex-direction:column;gap:6px"><b style="font-size:0.95rem">Immagine dell’ordine</b><span class="small muted">logo del fornitore o disegno del prodotto: i soci la vedono sulla scheda dell’ordine. Gli ordini nuovi dello stesso fornitore la riprendono da soli.</span>' +
+        '<div class="row" style="align-items:center;gap:12px">' + (o.immagine ? '<img class="ord-img" style="width:96px;height:72px" src="' + h(urlImg(o.immagine)) + '" alt="Immagine attuale">' : '') +
+        '<label class="btn small ghost" style="cursor:pointer">' + (o.immagine ? 'Cambia' : 'Scegli un’immagine') + '<input type="file" id="o-img" accept="image/*" style="display:none"></label>' +
+        (o.immagine ? '<button class="btn small quiet" data-act="img-togli">Togli</button>' : '') + '</div></div>') +
       refSel + '<button class="btn" data-act="salva-dati">' + (d.nuovo ? 'Crea ordine e aggiungi i prodotti' : 'Salva dati') + '</button></div>';
   }
 
@@ -1497,6 +1509,24 @@ var URL_APP = location.origin + location.pathname;
       '<button class="btn ghost" data-act="excel-fornitore">Scarica Excel</button></div>' +
       '<p class="muted small">L\'Excel ha due fogli: “Totali” (quello che ordini al fornitore) e “Per socio” (cosa ha preso ognuno, con le esclusioni), per chi prepara già diviso.</p>' +
       '<textarea id="testo-fornitore" hidden readonly>' + h(testo) + '</textarea></div>';
+  }
+
+  /* ---------- immagine dell'ordine: ridotta nel telefono (max 500 px, sfondo bianco) e salvata nel Drive del GAS ---------- */
+  function caricaImmagine(file) {
+    if (!/^image\//.test(file.type)) { toast('Scegli un file immagine (foto, JPG, PNG)'); return; }
+    toast('Preparo l’immagine…');
+    var url = URL.createObjectURL(file), im = new Image();
+    im.onload = function () {
+      var k = Math.min(1, 500 / Math.max(im.width, im.height)), w = Math.round(im.width * k), hh = Math.round(im.height * k);
+      var cv = document.createElement('canvas'); cv.width = w; cv.height = hh;
+      var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, hh); cx.drawImage(im, 0, 0, w, hh);
+      URL.revokeObjectURL(url);
+      call('salvaImmagine', S.data.ordine.id, cv.toDataURL('image/jpeg', 0.85)).then(function (r) {
+        S.data.ordine.immagine = r.immagine; disegna(); toast('Immagine salvata');
+      }, function (e) { toast(errMsg(e)); });
+    };
+    im.onerror = function () { URL.revokeObjectURL(url); toast('Non riesco ad aprire questa immagine'); };
+    im.src = url;
   }
 
   /* ---------- Excel per il fornitore (SheetJS caricato solo quando serve) ---------- */
@@ -2016,6 +2046,7 @@ var URL_APP = location.origin + location.pathname;
       case 'nuovo-ordine': vai('gOrdine', { tab: 'dati' }); break;
       case 'storico': vai('storico', {}); break;
       case 'excel-fornitore': excelFornitore(); break;
+      case 'img-togli': call('salvaImmagine', S.data.ordine.id, '').then(function () { S.data.ordine.immagine = ''; disegna(); toast('Immagine tolta'); }, function (e) { toast(errMsg(e)); }); break;
       case 'soci': vai('soci', {}); break;
       case 'fornitori': vai('fornitori', {}); break;
       case 'duplica': call('duplicaOrdine', S.data.ordine.id).then(function (r) { toast('Copia creata in bozza'); vai('gOrdine', { id: r.id, tab: 'dati' }, true); }, function (e) { toast(errMsg(e)); }); break;
@@ -2164,6 +2195,7 @@ var URL_APP = location.origin + location.pathname;
     if (ds.qty !== undefined) { cambiaQta(ds.p, ds.v || '', t.value); return; }
     if (ds.nota !== undefined) { var r = qtaDi(ds.p, ds.v || ''); if (r) cambiaQta(ds.p, ds.v || '', r.quantita, t.value); return; }
     if (t.id === 'imp-file' && t.files && t.files[0]) { leggiFile(t.files[0]); return; }
+    if (t.id === 'o-img' && t.files && t.files[0]) { caricaImmagine(t.files[0]); return; }
     if (ds.fgs !== undefined) { var fr = S.fg.righe[+ds.fgs]; fr.socio_id = t.value; fr.auto = false; disegna(); return; }
     if (ds.fgi !== undefined) { S.fg.righe[+ds.fgi].importo = Math.round(numIt(t.value) * 100) / 100; disegna(); return; }
     if (ds.pe !== undefined) {
