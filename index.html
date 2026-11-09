@@ -1019,6 +1019,7 @@ var URL_APP = location.origin + location.pathname;
     if (d.da_incassare) {
       var tot = d.da_incassare.reduce(function (s, x) { return s + x.importo; }, 0);
       inc = '<div class="stack"><div class="section-title"><h2>Da incassare</h2><span class="num muted">' + eur(tot) + '</span></div>' +
+        '<p class="small muted" style="margin:0">Quello che i soci devono dare a te, per gli ordini di cui sei referente.</p>' +
         (d.da_incassare.length ? '<div class="card"><div class="list">' + d.da_incassare.map(function (x) {
           var testo = 'Ciao ' + x.nome + ', ti ricordo il pagamento per l\'ordine ' + x.titolo + (x.per_conto ? ' (per ' + x.per_conto + ')' : '') + ': ' + eur(x.importo) + '. Grazie!';
           return '<div class="li"><div class="grow"><b>' + h(x.nome) + '</b>' + (x.per_conto ? ' <span class="muted">per ' + h(x.per_conto) + '</span>' : '') + '<div class="muted small">' + h(x.titolo) + '</div>' +
@@ -1065,6 +1066,12 @@ var URL_APP = location.origin + location.pathname;
     });
     if (!d.ordini.length) html += '<div class="card empty">Non gestisci ancora nessun ordine. Crea il primo con “Nuovo ordine”.</div>';
     if (d.saldi) {
+      var sosp = d.sospesi || [], totSosp = sosp.reduce(function (a, x) { return a + x.importo; }, 0);
+      html += '<div class="stack"><h2>Conti in sospeso del GAS</h2><div class="card stack"><div class="row between"><span>Totale ancora da incassare</span><b class="num">' + eur(totSosp) + '</b></div>' +
+        (sosp.length ? '<div class="list">' + sosp.map(function (x) {
+          return '<div class="li"><div class="grow"><b>' + h(x.referente) + '</b><div class="muted small">' + x.n_soci + (x.n_soci === 1 ? ' socio' : ' soci') + ' · ' + x.n_ordini + (x.n_ordini === 1 ? ' ordine' : ' ordini') + '</div></div><div class="amt num">' + eur(x.importo) + '</div></div>';
+        }).join('') + '</div>' : '<div class="muted small">Tutto incassato.</div>') +
+        '<p class="small muted" style="margin:0">Lo vede solo l’amministratore. Ogni socio, in “I miei conti”, vede solo i propri conti; ogni referente vede solo cosa deve incassare lui.</p></div></div>';
       html += '<div class="stack"><h2>Saldi dei soci</h2><div class="card">' + (d.saldi.length ? '<div class="list">' + d.saldi.map(function (s) {
         return '<div class="li"><div class="grow"><b>' + h(s.nome) + '</b>' + (s.crediti ? '<div class="muted small">credito ' + eur(s.crediti) + '</div>' : '') + '</div>' +
           '<span class="pill ' + (s.saldo < 0 ? 'due' : 'ok') + ' num">' + (s.saldo < 0 ? 'deve ' + eur(-s.saldo) : 'credito ' + eur(s.saldo)) + '</span></div>';
