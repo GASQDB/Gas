@@ -455,7 +455,7 @@ var URL_APP = location.origin + location.pathname;
       gestione: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6M9 4v3h6V4M6 6H5v15h14V6h-1"/><path d="M9 12h6M9 16h4"/></svg>'
     };
     var deb = S.boot.debiti && S.boot.debiti.totale > 0.004;
-    var b = function (k, lab) { return '<button type="button" data-nav="' + k + '" class="' + (cur === k ? 'on' : '') + '"' + (k === 'conti' && deb ? ' aria-label="I miei conti: hai un pagamento da fare"' : '') + '>' + ic[k] + lab + (k === 'conti' && deb ? '<span class="pallino" aria-hidden="true"></span>' : '') + '</button>'; };
+    var b = function (k, lab) { return '<button type="button" data-nav="' + k + '" class="' + (cur === k ? 'on' : '') + '"' + (k === 'conti' && deb ? ' aria-label="I miei conti: hai un pagamento da fare"' : '') + '>' + ic[k] + lab + ((k === 'conti' && deb) || (k === 'gestione' && S.boot.da_confermare > 0) ? '<span class="pallino" aria-hidden="true"></span>' : '') + '</button>'; };
     nav.innerHTML = '<div class="nav">' + b('ordini', 'Ordini') + b('conti', 'I miei conti') + (ref ? b('gestione', 'Gestione') : '') + '</div>';
   }
 
@@ -654,8 +654,8 @@ var URL_APP = location.origin + location.pathname;
     var v = S.view, p = S.p, pr;
     if (v === 'ordini') pr = call('avvio').then(function (d) { S.boot = d; S.data = d; });
     else if (v === 'ordina') pr = call('ordine', p.id, p.socio || '').then(function (d) { S.data = d; if (p.perConto !== undefined) S.perConto = p.perConto; });
-    else if (v === 'conti') pr = call('conti').then(function (d) { S.data = d; if (S.boot) S.boot.debiti = { totale: Math.max(0, -d.saldo), voci: (S.boot.debiti || {}).voci || [] }; });
-    else if (v === 'gestione') { S.statoApp = null; pr = call('gestione').then(function (d) { S.data = d; }); }
+    else if (v === 'conti') pr = call('conti').then(function (d) { S.data = d; if (S.boot && d.debiti) S.boot.debiti = d.debiti; });
+    else if (v === 'gestione') { S.statoApp = null; pr = call('gestione').then(function (d) { S.data = d; if (S.boot) S.boot.da_confermare = (d.da_confermare || []).length; }); }
     else if (v === 'gOrdine') pr = p.id ? Promise.all([call('ordine', p.id), call('soci'), call('fornitori')]).then(function (r) { S.data = r[0]; S.data.soci = r[1]; S.data.fornitori = r[2]; prepProdotti(); }) :
       Promise.all([call('soci'), call('fornitori')]).then(function (r) {
         S.data = { nuovo: true, soci: r[0], fornitori: r[1], ordine: { titolo: '', fornitore: '', fornitore_id: '', chiusura: '', consegna: '', pagamento: 'consegna', sconti: '', note: '' }, prodotti: [] };
@@ -1017,10 +1017,10 @@ var URL_APP = location.origin + location.pathname;
     var voce = function (v) {
       var dett = v.pagato ? 'Pagato' + (v.metodo ? ' con ' + h(v.metodo.toLowerCase()) : '') + (v.data_pagamento ? ' il ' + h(dataBreve(v.data_pagamento)) : '')
         : (v.stato === 'aperto' ? 'Ordine ancora aperto: l\'importo può cambiare' : 'Da dare a ' + h(v.referente) + (v.pagamento === 'anticipato' ? ' prima della consegna' : ' alla consegna'));
-      return '<div class="li"><div class="grow"><b>' + h(v.titolo) + '</b>' + (v.per_conto ? ' <span class="muted">per ' + h(v.per_conto) + '</span>' : '') +
+      return '<div class="li" style="flex-wrap:wrap"><div class="grow"><b>' + h(v.titolo) + '</b>' + (v.per_conto ? ' <span class="muted">per ' + h(v.per_conto) + '</span>' : '') +
         '<div class="muted small">' + dett + (v.da_pesare ? ' · la parte a peso si saprà dopo la pesata' : v.provvisorio ? ' · importo provvisorio, a peso' : '') + '</div>' +
         (v.pezzi && v.pezzi.length ? '<div class="small">' + v.pezzi.map(function (x) { return h(x.descrizione || 'Pezzo') + ' ' + eur(x.importo); }).join(' · ') + '</div>' : '') +
-        '</div><div class="amt num">' + conPeso(v.importo, v.da_pesare) + '</div></div>';
+        '</div><div class="amt num">' + conPeso(v.importo, v.da_pesare) + '</div>' + pagaHtml(v) + '</div>';
     };
     var blocco = function (tit, arr) { return arr.length ? '<div class="card"><h3>' + tit + '</h3><div class="list">' + arr.map(voce).join('') + '</div></div>' : ''; };
     var mov = d.movimenti.length ? '<div class="card"><h3>Crediti e rettifiche</h3><div class="list">' + d.movimenti.map(function (m) {
@@ -1039,7 +1039,7 @@ var URL_APP = location.origin + location.pathname;
         }).join('') + '</div></div>' : '<div class="card empty">Hai incassato tutto.</div>') + '</div>';
     }
     return '<div class="top"><span class="eyebrow">' + h(S.boot.me.nome) + '</span><h1>I miei conti</h1></div><div class="stack-lg">' + saldo +
-      blocco('Da pagare', daPagare) + blocco('Ordini in corso', inCorso) + mov + blocco('Già pagati', pagati) +
+      blocco('Da pagare', daPagare) + mieiDatiHtml() + blocco('Ordini in corso', inCorso) + mov + blocco('Già pagati', pagati) +
       (!d.voci.length && !d.movimenti.length ? '<div class="card empty">Non hai ancora partecipato a nessun ordine.</div>' : '') + inc +
       '<div class="card stack"><h3>Il mio PIN</h3>' +
       '<p class="small">' + (S.boot.me.ha_pin ? 'Hai già un PIN. Puoi cambiarlo qui.' : 'Scegli un PIN da 4 a 8 caratteri (cifre o lettere): ti servirà per entrare con il tuo nome se cambi telefono o perdi il link.') + '</p>' +
@@ -1047,6 +1047,40 @@ var URL_APP = location.origin + location.pathname;
       '<label class="f">Ripeti il PIN<input type="password" id="pin-ripeti" autocomplete="new-password" maxlength="8"></label>' +
       '<button class="btn" data-act="salva-pin">Salva il PIN</button></div>' +
       '<div class="card stack">' + sceltaTemaHtml() + '</div>' + segnalaHtml() + '</div>';
+  }
+
+  /* ---------- "Paga" e "Ho pagato" del socio ---------- */
+  function pagaHtml(v) {
+    if (v.pagato || v.stato === 'aperto' || !(v.importo > 0.004)) return '';
+    var k = v.ordine_id + '|' + (v.per_conto || '');
+    if (v.dichiarato) {
+      return '<div class="notice small" style="flex-basis:100%">Hai segnalato di aver pagato con <b>' + h(v.dichiarato.toLowerCase()) + '</b>' + (v.dichiarato_il ? ' ' + h(quandoFa(v.dichiarato_il)) : '') +
+        '. In attesa di conferma da ' + h(v.referente) + '. <button class="back" style="display:inline;min-height:0;padding:0" data-hopagato="' + h(k) + '" data-metodo="">Annulla</button></div>';
+    }
+    if (S.pagaAperto !== k) return '<div style="flex-basis:100%"><button class="btn small" data-pagaapri="' + h(k) + '">Paga</button></div>';
+    var p = v.paga || {}, causale = 'GAS - ' + v.titolo + ' - ' + S.boot.me.nome + (v.per_conto ? ' per ' + v.per_conto : '');
+    return '<div class="card stack" style="flex-basis:100%;background:var(--bg)"><div class="row between"><b>Paga ' + eur(v.importo) + ' a ' + h(v.referente) + '</b><button class="btn small quiet" data-pagaapri="">Chiudi</button></div>' +
+      (p.iban ? '<div class="small">IBAN<br><b class="num" style="word-break:break-all">' + h(p.iban) + '</b> <button class="btn small quiet" data-copiaiban="' + h(p.iban) + '">Copia</button></div>' : '<div class="small muted">' + h(v.referente) + ' non ha ancora inserito l’IBAN: chiedigli come preferisce essere pagato.</div>') +
+      '<div class="small">Causale<br><b>' + h(causale) + '</b> <button class="btn small quiet" data-copiaiban="' + h(causale) + '">Copia</button></div>' +
+      (p.come_pagare ? '<div class="small muted">' + h(p.come_pagare) + '</div>' : '') +
+      '<div class="small"><b>Quando hai pagato, tocca come:</b> ' + h(v.referente) + ' riceve l’avviso e lo conferma.</div>' +
+      '<div class="row">' + ['Bonifico', 'Satispay', 'Contanti'].map(function (m) { return '<button class="btn small ghost" data-hopagato="' + h(k) + '" data-metodo="' + m + '">Ho pagato: ' + m.toLowerCase() + '</button>'; }).join('') + '</div></div>';
+  }
+  function mieiDatiHtml() {
+    var md = S.data.miei_dati; if (!md) return '';
+    return '<details class="card"' + (md.iban ? '' : ' open') + '><summary>I miei dati per ricevere i pagamenti' + (md.iban ? '' : ' <span class="pill due" style="margin-left:6px">manca l’IBAN</span>') + '</summary><div class="stack" style="margin-top:8px">' +
+      '<p class="small muted" style="margin:0">Li vedono solo i soci che devono pagarti, quando toccano “Paga”.</p>' +
+      '<label class="f">Il mio IBAN<input type="text" id="md-iban" autocomplete="off" value="' + h(md.iban) + '" placeholder="IT60 X054 2811 1010 0000 0123 456"></label>' +
+      '<label class="f">Altri modi per pagarmi<span class="hint">facoltativo, es. “Satispay al 333…” o “contanti alla consegna”</span><input type="text" id="md-come" value="' + h(md.come_pagare) + '"></label>' +
+      '<button class="btn small" data-act="md-salva">Salva</button></div></details>';
+  }
+  function confermeHtml(arr) {
+    if (!arr || !arr.length) return '';
+    return '<div class="card stack" style="border:2px solid var(--bad)"><h3>Pagamenti da confermare (' + arr.length + ')</h3><div class="list">' + arr.map(function (x, i) {
+      return '<div class="li" style="flex-wrap:wrap"><div class="grow"><b>' + h(x.nome) + '</b>' + (x.per_conto ? ' <span class="muted">per ' + h(x.per_conto) + '</span>' : '') +
+        '<div class="small">dice di aver pagato <b>' + eur(x.importo) + '</b> con ' + h(String(x.metodo).toLowerCase()) + ' · ' + h(x.titolo) + '</div><div class="muted small">' + h(quandoFa(x.quando)) + '</div></div>' +
+        '<div class="row"><button class="btn small" data-conferma="' + i + '" data-ok="1">Confermo</button><button class="btn small quiet" data-conferma="' + i + '" data-ok="0">Non ancora</button></div></div>';
+    }).join('') + '</div></div>';
   }
 
   /* ========== vista: gestione ========== */
@@ -1068,7 +1102,7 @@ var URL_APP = location.origin + location.pathname;
         '<a class="btn small" target="_blank" rel="noopener" href="' + h(linkWA('', testo)) + '">Promemoria su WhatsApp</a></div>';
     }).join('');
     var html = '<div class="top"><span class="eyebrow">Referente</span><h1>Gestione</h1></div><div class="stack-lg">' +
-      promemoria + (admin ? statoAppHtml() : '') +
+      confermeHtml(d.da_confermare) + promemoria + (admin ? statoAppHtml() : '') +
       '<div class="row"><button class="btn" data-act="nuovo-ordine">+ Nuovo ordine</button><button class="btn ghost" data-act="fornitori">' + (admin ? 'Fornitori' : 'I miei fornitori') + '</button>' + (admin ? '<button class="btn ghost" data-act="soci">Soci e link</button>' : '') + '</div>';
     gruppi.forEach(function (g) {
       var arr = d.ordini.filter(function (o) { return o.stato === g[0]; });
@@ -1851,6 +1885,7 @@ var URL_APP = location.origin + location.pathname;
         '<div class="muted small">' + (p.righe.length ? p.righe.length + ' prodotti' + (p.importo_definitivo !== null ? ' · stimato ' + eur(p.stimato) : '') : 'importo inserito dal referente') + (p.abbuono ? ' · sconto ' + eur(p.abbuono) : '') + '</div></div>' +
         '<div class="total-big num">' + conPeso(p.dovuto, p.da_pesare) + '</div></div>' +
         (p.peso_variabile && p.importo_definitivo === null ? '<div class="notice warn small">Contiene prodotti a peso: inserisci l\'importo reale dopo la pesata.</div>' : '') +
+        (p.dichiarato ? '<div class="notice small">Dice di aver pagato con <b>' + h(p.dichiarato.toLowerCase()) + '</b>: se ti risulta, tocca il metodo qui sotto.</div>' : '') +
         '<div class="seg" role="group" aria-label="Pagamento">' + met + '</div>' +
         '<label class="check"><input type="checkbox" data-consegna="' + i + '"' + (p.consegnato ? ' checked' : '') + '> Consegnato</label>' +
         '<details><summary>Dettaglio e importi</summary><div class="stack" style="margin-top:6px"><div class="list">' + p.righe.map(function (r) {
@@ -2039,6 +2074,7 @@ var URL_APP = location.origin + location.pathname;
         return '<div class="card' + (s.attivo ? '' : ' muted') + '"><div class="row between"><h3 class="grow">' + h(s.nome) + '</h3>' + (s.attivo ? '' : '<span class="pill">disattivato</span>') + '</div>' +
           '<div class="grid2"><label class="f">Ruolo<select data-ruolo="' + h(s.id) + '"><option value="socio"' + (s.ruolo === 'socio' ? ' selected' : '') + '>Socio</option><option value="referente"' + (s.ruolo === 'referente' ? ' selected' : '') + '>Referente</option><option value="admin"' + (s.ruolo === 'admin' ? ' selected' : '') + '>Amministratore</option></select></label>' +
           '<label class="f">Cellulare<input type="tel" data-tel="' + h(s.id) + '" value="' + h(s.telefono) + '"></label></div>' +
+          (admin && s.ruolo !== 'socio' ? '<label class="f">IBAN per ricevere i pagamenti dei soci<input type="text" data-ibansocio="' + h(s.id) + '" value="' + h(s.iban || '') + '" autocomplete="off"></label>' : '') +
           (admin && s.codice ? '<div class="small muted">Codice: <b class="num" style="letter-spacing:.1em">' + h(s.codice) + '</b></div>' +
             '<div class="row">' + (s.telefono ? '<a class="btn small" target="_blank" rel="noopener" href="' + h(linkWA(s.telefono, msg)) + '">Invia link su WhatsApp</a>' : '') +
             '<button class="btn small ghost" data-copialink="' + h(s.id) + '">Copia link</button>' +
@@ -2076,6 +2112,17 @@ var URL_APP = location.origin + location.pathname;
       return;
     }
     if (ds.escl) { escludi(ds.escl, ds.voce); return; }
+    if (ds.pagaapri !== undefined) { S.pagaAperto = ds.pagaapri; disegna(); return; }
+    if (ds.hopagato) {
+      var hp = ds.hopagato.split('|'), hm = ds.metodo;
+      call('hoPagato', hp[0], hp.slice(1).join('|'), hm).then(function (r) { S.data = r; if (r.debiti) S.boot.debiti = r.debiti; S.pagaAperto = ''; disegna(); toast(hm ? 'Grazie! Il referente vedrà il tuo avviso' : 'Avviso annullato'); }, function (e) { toast(errMsg(e)); });
+      return;
+    }
+    if (ds.conferma !== undefined) {
+      var cx = S.data.da_confermare[+ds.conferma], cok = ds.ok === '1';
+      call('confermaPagamento', cx.ordine_id, cx.socio_id, cx.per_conto, cok).then(function (r) { S.data.da_confermare = r.da_confermare; S.boot.da_confermare = r.da_confermare.length; disegna(); toast(cok ? 'Pagamento di ' + cx.nome + ' confermato' : 'Lasciato da pagare'); }, function (e) { toast(errMsg(e)); });
+      return;
+    }
     if (ds.qp) { cambiaQuota(ds.qp, '', Number(ds.qd), Number(ds.qdelta)); return; }
     if (ds.qprendi) { cambiaQuota(ds.qprendi, ds.qv, Number(ds.qd), 1); return; }
     if (ds.fmanca !== undefined) {
@@ -2159,6 +2206,7 @@ var URL_APP = location.origin + location.pathname;
       case 'nuovo-ordine': vai('gOrdine', { tab: 'dati' }); break;
       case 'storico': vai('storico', {}); break;
       case 'excel-fornitore': excelFornitore(); break;
+      case 'md-salva': call('mieiDatiPagamento', document.getElementById('md-iban').value, document.getElementById('md-come').value).then(function (r) { S.data.miei_dati = r; disegna(); toast('Dati salvati'); }, function (e) { toast(errMsg(e)); }); break;
       case 'forn-modifica': S.fornMod = true; disegna(); break;
       case 'forn-paga':
       case 'forn-annulla':
@@ -2342,6 +2390,7 @@ var URL_APP = location.origin + location.pathname;
     if (t.type === 'checkbox' && t.parentNode && t.parentNode.classList.contains('chip')) { t.parentNode.classList.toggle('on', t.checked); return; }
     if (t.id === 'o-forn') { leggiFormOrdine(); applicaFornitore(t.value); disegna(); return; }
     if (ds.ruolo) { call('salvaSocio', { id: ds.ruolo, ruolo: t.value }).then(function (r) { S.data = r; disegna(); toast('Ruolo aggiornato'); }, function (e) { toast(errMsg(e)); disegna(); }); return; }
+    if (ds.ibansocio) { call('salvaSocio', { id: ds.ibansocio, iban: t.value }).then(function (r) { S.data = r; disegna(); toast('IBAN salvato'); }, function (e) { toast(errMsg(e)); }); return; }
     if (ds.tel) { call('salvaSocio', { id: ds.tel, telefono: t.value }).then(function (r) { S.data = r; disegna(); toast('Numero salvato'); }, function (e) { toast(errMsg(e)); }); return; }
   });
 
