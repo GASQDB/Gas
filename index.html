@@ -196,6 +196,9 @@ textarea { min-height: 120px; resize: vertical; }
 body { transition: background-color .2s; }
 @media (prefers-reduced-motion: reduce) { body { transition: none; } }
 .nav svg { width: 24px; height: 24px; }
+.nav button { position: relative; }
+.nav .pallino { position: absolute; top: 4px; left: calc(50% + 8px); min-width: 12px; height: 12px; border-radius: 6px; background: var(--bad); box-shadow: 0 0 0 2px var(--surface); }
+.memo-debito { border-radius: 12px; padding: 12px 14px; background: var(--bad-soft); color: var(--bad); border: 2px solid var(--bad); cursor: pointer; }
 
 .total-big { font-family: var(--f-display); font-weight: 800; font-size: 1.5rem; }
 .saldo { border-radius: var(--r); padding: 20px; display: flex; flex-direction: column; gap: 4px; }
@@ -451,7 +454,8 @@ var URL_APP = location.origin + location.pathname;
       conti: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg>',
       gestione: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6M9 4v3h6V4M6 6H5v15h14V6h-1"/><path d="M9 12h6M9 16h4"/></svg>'
     };
-    var b = function (k, lab) { return '<button type="button" data-nav="' + k + '" class="' + (cur === k ? 'on' : '') + '">' + ic[k] + lab + '</button>'; };
+    var deb = S.boot.debiti && S.boot.debiti.totale > 0.004;
+    var b = function (k, lab) { return '<button type="button" data-nav="' + k + '" class="' + (cur === k ? 'on' : '') + '"' + (k === 'conti' && deb ? ' aria-label="I miei conti: hai un pagamento da fare"' : '') + '>' + ic[k] + lab + (k === 'conti' && deb ? '<span class="pallino" aria-hidden="true"></span>' : '') + '</button>'; };
     nav.innerHTML = '<div class="nav">' + b('ordini', 'Ordini') + b('conti', 'I miei conti') + (ref ? b('gestione', 'Gestione') : '') + '</div>';
   }
 
@@ -650,7 +654,7 @@ var URL_APP = location.origin + location.pathname;
     var v = S.view, p = S.p, pr;
     if (v === 'ordini') pr = call('avvio').then(function (d) { S.boot = d; S.data = d; });
     else if (v === 'ordina') pr = call('ordine', p.id, p.socio || '').then(function (d) { S.data = d; if (p.perConto !== undefined) S.perConto = p.perConto; });
-    else if (v === 'conti') pr = call('conti').then(function (d) { S.data = d; });
+    else if (v === 'conti') pr = call('conti').then(function (d) { S.data = d; if (S.boot) S.boot.debiti = { totale: Math.max(0, -d.saldo), voci: (S.boot.debiti || {}).voci || [] }; });
     else if (v === 'gestione') { S.statoApp = null; pr = call('gestione').then(function (d) { S.data = d; }); }
     else if (v === 'gOrdine') pr = p.id ? Promise.all([call('ordine', p.id), call('soci'), call('fornitori')]).then(function (r) { S.data = r[0]; S.data.soci = r[1]; S.data.fornitori = r[2]; prepProdotti(); }) :
       Promise.all([call('soci'), call('fornitori')]).then(function (r) {
@@ -729,8 +733,15 @@ var URL_APP = location.origin + location.pathname;
     var avvisi = urgenti.map(function (o) {
       return '<div class="notice warn tap" data-ordine="' + h(o.id) + '" role="button" tabindex="0"><b>Chiude ' + h(quandoChiude(o)) + ': ' + h(o.titolo) + '</b><br>Non hai ancora ordinato. Tocca qui per ordinare.</div>';
     }).join('');
+    var db = d.debiti || { totale: 0, voci: [] }, memo = '';
+    if (db.totale > 0.004) {
+      var perRef = {};
+      db.voci.forEach(function (v) { perRef[v.referente] = (perRef[v.referente] || 0) + v.importo; });
+      memo = '<div class="memo-debito" data-nav="conti" role="button" tabindex="0"><b>Hai ' + eur(db.totale) + ' da pagare</b><br><span class="small">' +
+        Object.keys(perRef).map(function (r) { return eur(perRef[r]) + ' a ' + h(r); }).join(' · ') + ' — tocca qui per i dettagli</span></div>';
+    }
     return '<div class="top"><span class="eyebrow">Gruppo di Acquisto</span><h1>Ciao ' + h(me.nome) + '</h1></div>' +
-      '<div class="stack-lg">' + avvisi +
+      '<div class="stack-lg">' + memo + avvisi +
       '<div class="stack"><div class="section-title"><h2>Ordini aperti</h2><span class="muted small">' + aperti.length + '</span></div>' +
       (aperti.length ? aperti.map(card).join('') : '<div class="card empty">In questo momento non ci sono ordini aperti.<br>Quando un referente ne apre uno, lo trovi qui.</div>') + '</div>' +
       (altri.length ? '<div class="stack"><div class="section-title"><h2>Chiusi e in consegna</h2></div>' + altri.map(card).join('') + '</div>' : '') +
@@ -2023,7 +2034,7 @@ var URL_APP = location.origin + location.pathname;
   }
 
   document.addEventListener('click', function (ev) {
-    var t = ev.target.closest('button, [data-ordine], [data-gordine], a');
+    var t = ev.target.closest('button, [data-ordine], [data-gordine], [data-nav], a');
     if (!t) return;
     var ds = t.dataset, act = ds.act;
 
