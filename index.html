@@ -1057,7 +1057,8 @@ var URL_APP = location.origin + location.pathname;
       return '<div class="card tap" data-gordine="' + h(o.id) + '" role="button" tabindex="0"><div class="row between"><h3 class="grow">' + h(o.titolo) + '</h3>' + pill(o.stato) + '</div>' +
         '<div class="muted small">' + (o.chiusura ? 'chiude ' + h(dataBreve(o.chiusura)) + ' · ' : '') + (o.consegna ? 'consegna ' + h(dataBreve(o.consegna)) + ' · ' : '') + (admin ? 'ref. ' + h(o.referente) : '') + '</div>' +
         (o.stato !== 'bozza' ? '<div class="row between small"><span>' + o.n_partecipanti + ' partecipanti · <b class="num">' + eur(o.totale) + '</b></span>' +
-          (o.stato !== 'aperto' ? '<span class="pill ' + (o.incassato >= o.totale - 0.004 ? 'ok' : 'due') + '">incassati ' + eur(o.incassato) + '</span>' : '') + '</div>' : '') + '</div>';
+          (o.stato !== 'aperto' ? '<span class="pill ' + (o.incassato >= o.totale - 0.004 ? 'ok' : 'due') + '">incassati ' + eur(o.incassato) + '</span>' : '') + '</div>' : '') +
+        (o.stato !== 'bozza' && o.stato !== 'aperto' ? '<div class="small"><span class="pill ' + (o.forn && o.forn.pagato ? 'ok">fornitore pagato ✓' : 'due">fornitore da pagare') + '</span></div>' : '') + '</div>';
     };
     if (admin) { if (!S.statoApp) setTimeout(caricaStatoApp, 0); }
     var promemoria = d.ordini.filter(function (o) { return o.stato === 'aperto' && chiudeA(o); }).map(function (o) {
@@ -1082,6 +1083,7 @@ var URL_APP = location.origin + location.pathname;
         (sosp.length ? '<div class="list">' + sosp.map(function (x) {
           return '<div class="li"><div class="grow"><b>' + h(x.referente) + '</b><div class="muted small">' + x.n_soci + (x.n_soci === 1 ? ' socio' : ' soci') + ' · ' + x.n_ordini + (x.n_ordini === 1 ? ' ordine' : ' ordini') + '</div></div><div class="amt num">' + eur(x.importo) + '</div></div>';
         }).join('') + '</div>' : '<div class="muted small">Tutto incassato.</div>') +
+        fornDaPagareHtml(d.fornitori_da_pagare || []) +
         '<p class="small muted" style="margin:0">Lo vede solo l’amministratore. Ogni socio, in “I miei conti”, vede solo i propri conti; ogni referente vede solo cosa deve incassare lui.</p></div></div>';
       html += '<div class="stack"><h2>Saldi dei soci</h2><div class="card">' + (d.saldi.length ? '<div class="list">' + d.saldi.map(function (s) {
         return '<div class="li"><div class="grow"><b>' + h(s.nome) + '</b>' + (s.crediti ? '<div class="muted small">credito ' + eur(s.crediti) + '</div>' : '') + '</div>' +
@@ -1102,12 +1104,20 @@ var URL_APP = location.origin + location.pathname;
     return html + '</div>';
   }
 
+  function fornDaPagareHtml(arr) {
+    var tot = arr.reduce(function (a, x) { return a + x.importo; }, 0);
+    return '<div class="row between" style="margin-top:6px"><span>Ancora da pagare ai fornitori</span><b class="num">' + eur(tot) + '</b></div>' +
+      (arr.length ? '<div class="list">' + arr.map(function (x) {
+        return '<div class="li tap" data-gordine="' + h(x.id) + '" role="button" tabindex="0" style="cursor:pointer"><div class="grow"><b>' + h(x.titolo) + '</b><div class="muted small">' + (x.fornitore ? h(x.fornitore) + ' · ' : '') + 'ref. ' + h(x.referente) + '</div></div><div class="amt num">' + eur(x.importo) + '</div></div>';
+      }).join('') + '</div>' : '<div class="muted small">Tutti i fornitori sono pagati.</div>');
+  }
+
   /* ========== vista: gestione di un ordine ========== */
   function prepProdotti() {
     S.prodEdit = (S.data.prodotti || []).map(function (p) {
       return { id: p.id, categoria: p.categoria, nome: p.nome, formato: p.formato, unita: p.unita, qta_conf: p.qta_conf, prezzo: p.prezzo, varianti: p.varianti.join(', '), peso_variabile: p.peso_variabile, disponibile: p.disponibile, codice: p.codice || '', contenuto: (p.contenuto || []).join('\n'), max_esclusi: p.max_esclusi || '' };
     });
-    S.prodDirty = false; S.imp = null; S.conferma = ''; S.fg = null;
+    S.prodDirty = false; S.imp = null; S.conferma = ''; S.fg = null; S.fornMod = false;
   }
   function coeff(sconti) { var k = 1; String(sconti || '').split(/[+;]/).forEach(function (x) { x = x.trim().replace(',', '.'); if (x) k *= 1 - (parseFloat(x) || 0) / 100; }); return k; }
   function numIt(v) { var s = String(v === undefined || v === null ? '' : v).replace(/€|\s/g, ''); if (s.indexOf(',') >= 0 && s.indexOf('.') >= 0) s = s.replace(/\./g, '').replace(',', '.'); else s = s.replace(',', '.'); var n = parseFloat(s); return isNaN(n) ? 0 : n; }
@@ -1855,7 +1865,25 @@ var URL_APP = location.origin + location.pathname;
     return '<div class="stack"><div class="card"><div class="row between"><span>Totale ordine</span><b class="num">' + eur(tot) + '</b></div>' +
       '<div class="row between"><span>Incassato</span><b class="num">' + eur(inc) + '</b></div>' +
       '<div class="row between"><span>Mancano</span><span class="pill ' + (tot - inc > 0.004 ? 'due' : 'ok') + ' num">' + eur(tot - inc) + '</span></div></div>' +
-      cartaHtml() + (righe || '<div class="card empty">Nessuno ha ancora ordinato.</div>') + socio + '</div>';
+      fornitoreHtml() + cartaHtml() + (righe || '<div class="card empty">Nessuno ha ancora ordinato.</div>') + socio + '</div>';
+  }
+
+  /* ---------- pagamento del referente al fornitore ---------- */
+  function totFornitore() { return (S.data.riepilogo || []).reduce(function (s, x) { return s + x.importo; }, 0); }
+  function fornitoreHtml() {
+    var o = S.data.ordine, f = o.forn || { pagato: false };
+    if (f.pagato && !S.fornMod) {
+      return '<div class="card stack"><div class="row between"><h3>Fornitore pagato ✓</h3><span class="pill ok num">' + eur(f.importo) + '</span></div>' +
+        '<div class="small muted">' + (f.data ? 'il ' + h(dataLunga(f.data)) : '') + (f.metodo ? ' · ' + h(f.metodo.toLowerCase()) : '') + '</div>' +
+        '<div class="row"><button class="btn small quiet" data-act="forn-modifica">Modifica</button><button class="btn small quiet" data-act="forn-annulla">Non è pagato</button></div></div>';
+    }
+    var oggi = new Date(), iso = oggi.getFullYear() + '-' + ('0' + (oggi.getMonth() + 1)).slice(-2) + '-' + ('0' + oggi.getDate()).slice(-2);
+    return '<details class="card"' + (S.fornMod ? ' open' : '') + '><summary>Pagamento al fornitore: <span class="pill due" style="margin-left:6px">da pagare</span></summary><div class="stack" style="margin-top:8px">' +
+      '<p class="small muted" style="margin:0">Quando hai pagato il fornitore, segnalo qui: l’amministratore vede quali fornitori sono ancora da pagare.</p>' +
+      '<div class="grid2"><label class="f">Importo pagato<span class="hint">proposto: il totale per il fornitore</span><input type="text" inputmode="decimal" id="fp-imp" value="' + h(String((f.importo || Math.round(totFornitore() * 100) / 100).toFixed(2)).replace('.', ',')) + '"></label>' +
+      '<label class="f">Data<input type="date" id="fp-data" value="' + h(f.data || iso) + '"></label></div>' +
+      '<label class="f">Come<select id="fp-met">' + ['Bonifico', 'Contanti', 'Satispay', 'Altro'].map(function (m) { return '<option' + (f.metodo === m ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></label>' +
+      '<button class="btn" data-act="forn-paga">Segna pagato al fornitore</button></div></details>';
   }
 
   /* ---------- importi da un foglio di carta (es. totali del pollo) ---------- */
@@ -2131,6 +2159,13 @@ var URL_APP = location.origin + location.pathname;
       case 'nuovo-ordine': vai('gOrdine', { tab: 'dati' }); break;
       case 'storico': vai('storico', {}); break;
       case 'excel-fornitore': excelFornitore(); break;
+      case 'forn-modifica': S.fornMod = true; disegna(); break;
+      case 'forn-paga':
+      case 'forn-annulla':
+        var fpPaga = act === 'forn-paga';
+        call('pagaFornitore', S.data.ordine.id, fpPaga ? { pagato: true, importo: numIt(document.getElementById('fp-imp').value), data: document.getElementById('fp-data').value, metodo: document.getElementById('fp-met').value } : { pagato: false })
+          .then(function (r) { S.data.ordine.forn = r.forn; S.fornMod = false; disegna(); toast(fpPaga ? 'Segnato: fornitore pagato' : 'Segnato: fornitore da pagare'); }, function (e) { toast(errMsg(e)); });
+        break;
       case 'img-togli': call('salvaImmagine', S.data.ordine.id, '').then(function () { S.data.ordine.immagine = ''; disegna(); toast('Immagine tolta'); }, function (e) { toast(errMsg(e)); }); break;
       case 'soci': vai('soci', {}); break;
       case 'fornitori': vai('fornitori', {}); break;
