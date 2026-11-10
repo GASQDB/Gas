@@ -627,7 +627,8 @@ var URL_APP = location.origin + location.pathname;
     var on = st.soci.filter(function (s) { return s.online; });
     var mai = st.soci.filter(function (s) { return !s.ultimo; }).length;
     var lista = '<div class="list">' + st.soci.map(function (s) {
-      return '<div class="li"><div class="grow"><b>' + h(s.nome) + '</b>' + (s.online && s.dove ? '<div class="muted small">' + h(s.dove) + '</div>' : '') + '</div>' +
+      return '<div class="li"><div class="grow"><b>' + h(s.nome) + '</b>' + (s.online && s.dove ? '<div class="muted small">' + h(s.dove) + '</div>' : '') +
+        '<div class="muted small">' + (s.accessi ? s.accessi + (s.accessi === 1 ? ' accesso' : ' accessi') : 'nessun accesso') + '</div></div>' +
         '<span class="pill ' + (s.online ? 'ok' : (s.ultimo ? '' : 'due')) + '">' + (s.online ? 'online' : h(quandoFa(s.ultimo))) + '</span></div>';
     }).join('') + '</div>';
     var segn = st.segnalazioni.length ? '<div class="list">' + st.segnalazioni.map(function (x) {
@@ -636,7 +637,10 @@ var URL_APP = location.origin + location.pathname;
     }).join('') + '</div>' : '<div class="muted small">Nessuna segnalazione.</div>';
     return '<div class="card stack" id="stato-app"><div class="row between"><h3>Adesso nell’app: ' + on.length + '</h3><button class="btn small quiet" data-act="stato-aggiorna">Aggiorna</button></div>' +
       '<div class="small">' + (on.length ? on.map(function (s) { return h(s.nome); }).join(', ') : 'Nessuno in questo momento.') + '</div>' +
-      '<details><summary>Ultimo accesso di tutti i soci' + (mai ? ' (' + mai + ' mai entrati)' : '') + '</summary><div style="margin-top:6px">' + lista + '</div></details>' +
+      '<details><summary>Accessi dei soci' + (mai ? ' (' + mai + ' mai entrati)' : '') + '</summary><div style="margin-top:6px">' +
+        '<div class="small muted">Accessi contati ' + (st.conta_dal ? 'dal ' + h(new Date(st.conta_dal).toLocaleDateString('it-IT')) : 'da quando è attivo il conteggio') + '. Un accesso = app aperta dopo almeno mezz’ora di pausa. In totale: <b>' +
+        st.soci.reduce(function (a, s) { return a + (s.accessi || 0); }, 0) + '</b>.</div>' + lista +
+        '<button class="btn small quiet" data-act="azzera-accessi" style="margin-top:8px">' + (S.conferma === 'azzera-acc' ? 'Tocca ancora per azzerare' : 'Azzera i conteggi') + '</button></div></details>' +
       '<details><summary>Segnalazioni (' + st.segnalazioni.length + ')</summary><div class="stack" style="margin-top:6px">' + segn +
       '<label class="f">Le segnalazioni arrivano a<span class="hint">vuoto = l’email dell’account Google del GAS</span><input type="email" id="email-segn" value="' + h(st.email) + '" placeholder="nome@gmail.com"></label>' +
       '<button class="btn small ghost" data-act="email-segn-salva">Salva indirizzo</button></div></details></div>';
@@ -2226,6 +2230,11 @@ var URL_APP = location.origin + location.pathname;
       case 'nuovo-ordine': vai('gOrdine', { tab: 'dati' }); break;
       case 'storico': vai('storico', {}); break;
       case 'excel-fornitore': excelFornitore(); break;
+      case 'azzera-accessi':
+        if (S.conferma !== 'azzera-acc') { S.conferma = 'azzera-acc'; t.textContent = 'Tocca ancora per azzerare'; break; }
+        S.conferma = '';
+        call('azzeraAccessi').then(function (r) { S.statoApp = r; var el = document.getElementById('stato-app'); if (el) el.outerHTML = statoAppHtml(); toast('Conteggi azzerati'); }, function (e) { toast(errMsg(e)); });
+        break;
       case 'chat-copia': copia(document.getElementById('chat-testo').value, 'chat-testo'); break;
       case 'md-salva': call('mieiDatiPagamento', document.getElementById('md-iban').value, document.getElementById('md-come').value).then(function (r) { S.data.miei_dati = r; disegna(); toast('Dati salvati'); }, function (e) { toast(errMsg(e)); }); break;
       case 'forn-modifica': S.fornMod = true; disegna(); break;
