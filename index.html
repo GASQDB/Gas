@@ -1900,7 +1900,27 @@ var URL_APP = location.origin + location.pathname;
     return '<div class="stack"><div class="card"><div class="row between"><span>Totale ordine</span><b class="num">' + eur(tot) + '</b></div>' +
       '<div class="row between"><span>Incassato</span><b class="num">' + eur(inc) + '</b></div>' +
       '<div class="row between"><span>Mancano</span><span class="pill ' + (tot - inc > 0.004 ? 'due' : 'ok') + ' num">' + eur(tot - inc) + '</span></div></div>' +
-      fornitoreHtml() + cartaHtml() + (righe || '<div class="card empty">Nessuno ha ancora ordinato.</div>') + socio + '</div>';
+      chatImportiHtml() + fornitoreHtml() + cartaHtml() + (righe || '<div class="card empty">Nessuno ha ancora ordinato.</div>') + socio + '</div>';
+  }
+
+  /* ---------- importi di tutti, da copiare nella chat del gruppo ---------- */
+  function testoImporti(soloDaPagare) {
+    var d = S.data, o = d.ordine, pg = (d.paganti || []).filter(function (p) { return !soloDaPagare || !p.pagato; });
+    var righe = pg.map(function (p) {
+      return '- ' + p.nome + (p.per_conto ? ' (per ' + p.per_conto + ')' : '') + ': ' + conPeso(p.dovuto, p.da_pesare) + (p.pagato ? ' ✓ pagato' : '');
+    });
+    var tot = pg.reduce(function (s, p) { return s + p.dovuto; }, 0);
+    return o.titolo + ' – importi' + (soloDaPagare ? ' ancora da pagare' : '') + '\n' + righe.join('\n') +
+      '\nTotale: ' + eur(tot) + '\nSi paga a ' + o.referente + (o.pagamento === 'anticipato' ? ', prima della consegna' : '') +
+      '. Nell’app, in “I miei conti”, trovi il dettaglio e il tasto “Paga” con IBAN e causale.';
+  }
+  function chatImportiHtml() {
+    var d = S.data; if (!(d.paganti || []).length) return '';
+    var solo = !!S.soloDaPagare, testo = testoImporti(solo);
+    return '<details class="card"><summary>Messaggio con gli importi per la chat</summary><div class="stack" style="margin-top:6px">' +
+      '<label class="check"><input type="checkbox" id="chat-solo"' + (solo ? ' checked' : '') + '> Solo chi deve ancora pagare</label>' +
+      '<textarea id="chat-testo" rows="9">' + h(testo) + '</textarea>' +
+      '<div class="row"><button class="btn small" data-act="chat-copia">Copia</button><a class="btn small ghost" target="_blank" rel="noopener" href="' + h(linkWA('', testo)) + '">Apri WhatsApp</a></div></div></details>';
   }
 
   /* ---------- pagamento del referente al fornitore ---------- */
@@ -2206,6 +2226,7 @@ var URL_APP = location.origin + location.pathname;
       case 'nuovo-ordine': vai('gOrdine', { tab: 'dati' }); break;
       case 'storico': vai('storico', {}); break;
       case 'excel-fornitore': excelFornitore(); break;
+      case 'chat-copia': copia(document.getElementById('chat-testo').value, 'chat-testo'); break;
       case 'md-salva': call('mieiDatiPagamento', document.getElementById('md-iban').value, document.getElementById('md-come').value).then(function (r) { S.data.miei_dati = r; disegna(); toast('Dati salvati'); }, function (e) { toast(errMsg(e)); }); break;
       case 'forn-modifica': S.fornMod = true; disegna(); break;
       case 'forn-paga':
@@ -2364,6 +2385,7 @@ var URL_APP = location.origin + location.pathname;
     if (ds.nota !== undefined) { var r = qtaDi(ds.p, ds.v || ''); if (r) cambiaQta(ds.p, ds.v || '', r.quantita, t.value); return; }
     if (t.id === 'imp-file' && t.files && t.files[0]) { leggiFile(t.files[0]); return; }
     if (t.id === 'o-img' && t.files && t.files[0]) { caricaImmagine(t.files[0]); return; }
+    if (t.id === 'chat-solo') { S.soloDaPagare = t.checked; var ct = document.getElementById('chat-testo'); if (ct) { ct.value = testoImporti(t.checked); var wa = ct.parentNode.querySelector('a.btn'); if (wa) wa.href = linkWA('', ct.value); } return; }
     if (ds.fgs !== undefined) { var fr = S.fg.righe[+ds.fgs]; fr.socio_id = t.value; fr.auto = false; disegna(); return; }
     if (ds.fgi !== undefined) { S.fg.righe[+ds.fgi].importo = Math.round(numIt(t.value) * 100) / 100; disegna(); return; }
     if (ds.pe !== undefined) {
