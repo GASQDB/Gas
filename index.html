@@ -326,6 +326,12 @@ var URL_APP = location.origin + location.pathname;
     return (interi ? interi + (r ? ' e ' : '') : '') + (r ? F[r + '/' + d] || (r + '/' + d) : '');
   }
   function qtR(r) { return r.quota ? fraz(r.quantita, r.quota) : qt(r.quantita); }
+  /* prodotti a peso con un minimo (es. formaggi: minimo 300 g, poi a etti): quantità in kg, mostrata in grammi */
+  function aGrammi(p) { return !!(p && p.minimo && String(p.unita).toLowerCase() === 'kg'); }
+  function qtaTxt(p, q) { return aGrammi(p) ? (q >= 1 ? qt(q) + ' kg' : Math.round(q * 1000) + ' g') : qt(q) + ' ' + (p ? p.unita : ''); }
+  function valQ(p, q) { return aGrammi(p) ? Math.round((q || 0) * 1000) : (q || 0); }
+  function minTxt(p) { return p.minimo ? 'minimo ' + (aGrammi(p) ? Math.round(p.minimo * 1000) + ' g' : qt(p.minimo) + ' ' + p.unita) : ''; }
+  function prodDi(pid) { return (S.data.prodotti || []).filter(function (x) { return x.id === pid; })[0]; }
   function qt(n) { return (Number(n) || 0).toLocaleString('it-IT', { maximumFractionDigits: 2 }); }
   var GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
   var MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
@@ -856,11 +862,11 @@ var URL_APP = location.origin + location.pathname;
       if (comp && p.disponibile && varianti.length === 1 && !varianti[0] && !(p.contenuto && p.contenuto.length) && !(p.divisibile && mod)) {
         // una riga sola: nome e prezzo a sinistra, + e − a destra
         var r1 = qtaDi(p.id, ''), q1 = r1 ? r1.quantita : 0;
-        var meta = [p.formato, confTxt(p), p.peso_variabile ? 'a peso reale' : ''].filter(Boolean).join(' · ');
+        var meta = [p.formato, aGrammi(p) ? 'scegli i grammi' : confTxt(p), minTxt(p), p.peso_variabile && !aGrammi(p) ? 'a peso reale' : ''].filter(Boolean).join(' · ');
         var ctrl1 = mod
           ? '<div class="stepper"><button class="step" data-step="-1" data-p="' + h(p.id) + '" data-v="" aria-label="Togli uno">−</button>' +
-            '<input type="number" inputmode="decimal" min="0" step="1" value="' + (q1 || 0) + '" data-qty data-p="' + h(p.id) + '" data-v="" aria-label="Quantità ' + h(p.nome) + '" id="q-' + h(p.id) + '-">' +
-            '<button class="step plus" data-step="1" data-p="' + h(p.id) + '" data-v="" aria-label="Aggiungi uno">+</button></div>'
+            '<input type="number" inputmode="decimal" min="0" step="' + (aGrammi(p) ? 50 : 1) + '"' + (aGrammi(p) ? ' style="width:58px"' : '') + ' value="' + valQ(p, q1) + '" data-qty data-p="' + h(p.id) + '" data-v="" aria-label="Quantità ' + h(p.nome) + '" id="q-' + h(p.id) + '-">' +
+            '<button class="step plus" data-step="1" data-p="' + h(p.id) + '" data-v="" aria-label="Aggiungi uno">+</button></div>' + (aGrammi(p) ? '<span class="small muted">g</span>' : '')
           : '<b class="num">' + qt(q1) + ' ' + h(p.unita) + '</b>';
         var nota1 = (q1 > 0 && mod) ? '<input type="text" class="small" placeholder="Nota (facoltativa)" value="' + h(r1.note || '') + '" data-nota data-p="' + h(p.id) + '" data-v="" style="min-height:36px">' :
           (r1 && r1.note ? '<div class="muted small">Nota: ' + h(r1.note) + '</div>' : '');
@@ -871,7 +877,7 @@ var URL_APP = location.origin + location.pathname;
       }
       out += '<div class="prod ' + (ha ? 'has ' : '') + (p.disponibile ? '' : 'off') + '">' +
         '<div class="row between" style="align-items:flex-start"><div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
-        '<div class="muted small">' + h([p.formato, confTxt(p)].filter(Boolean).join(' · ')) + '</div></div>' +
+        '<div class="muted small">' + h([p.formato, aGrammi(p) ? 'scegli i grammi' : confTxt(p), minTxt(p)].filter(Boolean).join(' · ')) + '</div></div>' +
         '<div class="prezzo num" style="text-align:right">' + (p.da_pesare ? eur(p.prezzo_kg) + '<div class="muted small" style="font-weight:400">al kg</div>' : eur(p.prezzo_unita) + '<div class="muted small" style="font-weight:400">a ' + h(p.unita) + '</div>') + '</div></div>' +
         (p.da_pesare ? '<div class="muted small">Si paga a peso: l\'importo lo sai dopo la pesata.</div>' : p.peso_variabile ? '<div class="muted small">Prezzo indicativo: si paga in base al peso reale.</div>' : '') +
         (!p.disponibile ? '<div class="small"><b>Al momento non disponibile</b></div>' :
@@ -879,8 +885,8 @@ var URL_APP = location.origin + location.pathname;
             var r = qtaDi(p.id, v), qv = r ? r.quantita : 0;
             var ctrl = mod
               ? '<div class="stepper"><button class="step" data-step="-1" data-p="' + h(p.id) + '" data-v="' + h(v) + '" aria-label="Togli uno">−</button>' +
-                '<input type="number" inputmode="decimal" min="0" step="1" value="' + (qv || 0) + '" data-qty data-p="' + h(p.id) + '" data-v="' + h(v) + '" aria-label="Quantità ' + h(p.nome + ' ' + v) + '" id="q-' + h(p.id) + '-' + h(v).replace(/\W/g, '_') + '">' +
-                '<button class="step plus" data-step="1" data-p="' + h(p.id) + '" data-v="' + h(v) + '" aria-label="Aggiungi uno">+</button></div>'
+                '<input type="number" inputmode="decimal" min="0" step="' + (aGrammi(p) ? 50 : 1) + '"' + (aGrammi(p) ? ' style="width:58px"' : '') + ' value="' + valQ(p, qv) + '" data-qty data-p="' + h(p.id) + '" data-v="' + h(v) + '" aria-label="Quantità ' + h(p.nome + ' ' + v) + '" id="q-' + h(p.id) + '-' + h(v).replace(/\W/g, '_') + '">' +
+                '<button class="step plus" data-step="1" data-p="' + h(p.id) + '" data-v="' + h(v) + '" aria-label="Aggiungi uno">+</button></div>' + (aGrammi(p) ? '<span class="small muted">g</span>' : '')
               : '<b class="num">' + qt(qv) + ' ' + h(p.unita) + '</b>';
             var nota = (qv > 0 && mod) ? '<input type="text" class="small" placeholder="Nota (facoltativa), es. ben matura" value="' + h(r.note || '') + '" data-nota data-p="' + h(p.id) + '" data-v="' + h(v) + '" style="min-height:42px">' :
               (r && r.note ? '<div class="muted small">Nota: ' + h(r.note) + '</div>' : '');
@@ -971,7 +977,7 @@ var URL_APP = location.origin + location.pathname;
       return (Object.keys(gruppi).length > 1 || k ? '<div class="eyebrow" style="margin-top:8px">' + (k ? 'Per ' + h(k) : 'Per ' + (d.socio_ordine.id !== S.boot.me.id ? h(d.socio_ordine.nome) : 'te')) + ' · ' + eur(t.perChi[k]) + '</div>' : '') +
         '<div class="list">' + gruppi[k].map(function (r) {
           var p = prezzi[r.prodotto_id] || { nome: '?', prezzo_unita: 0, unita: '' };
-          return '<div class="li"><div class="grow">' + qtR(r) + ' × ' + h(p.nome) + (r.quota ? ' <span class="muted small">(in comune)</span>' : '') + (r.variante ? ' <b>' + h(r.variante) + '</b>' : '') + (r.esclusi && r.esclusi.length ? '<div class="small">senza ' + h(r.esclusi.join(', ')) + '</div>' : '') + (r.note ? '<div class="muted small">' + h(r.note) + '</div>' : '') + '</div><div class="amt num">' + (p.da_pesare ? '<span class="muted">da pesare</span>' : eur((p.pu_esatto || p.prezzo_unita) * r.quantita / (r.quota || 1))) + '</div></div>';
+          return '<div class="li"><div class="grow">' + (aGrammi(p) ? qtaTxt(p, r.quantita) + ' di' : qtR(r) + ' ×') + ' ' + h(p.nome) + (r.quota ? ' <span class="muted small">(in comune)</span>' : '') + (r.variante ? ' <b>' + h(r.variante) + '</b>' : '') + (r.esclusi && r.esclusi.length ? '<div class="small">senza ' + h(r.esclusi.join(', ')) + '</div>' : '') + (r.note ? '<div class="muted small">' + h(r.note) + '</div>' : '') + '</div><div class="amt num">' + (p.da_pesare ? '<span class="muted">da pesare</span>' : eur((p.pu_esatto || p.prezzo_unita) * r.quantita / (r.quota || 1))) + '</div></div>';
         }).join('') + '</div>';
     }).join('');
   }
@@ -1153,7 +1159,7 @@ var URL_APP = location.origin + location.pathname;
   /* ========== vista: gestione di un ordine ========== */
   function prepProdotti() {
     S.prodEdit = (S.data.prodotti || []).map(function (p) {
-      return { id: p.id, categoria: p.categoria, nome: p.nome, formato: p.formato, unita: p.unita, qta_conf: p.qta_conf, prezzo: p.prezzo, varianti: p.varianti.join(', '), peso_variabile: p.peso_variabile, disponibile: p.disponibile, codice: p.codice || '', contenuto: (p.contenuto || []).join('\n'), max_esclusi: p.max_esclusi || '' };
+      return { id: p.id, categoria: p.categoria, nome: p.nome, formato: p.formato, unita: p.unita, qta_conf: p.qta_conf, prezzo: p.prezzo, varianti: p.varianti.join(', '), peso_variabile: p.peso_variabile, disponibile: p.disponibile, codice: p.codice || '', contenuto: (p.contenuto || []).join('\n'), max_esclusi: p.max_esclusi || '', minimo: p.minimo || '', passo: p.passo || '' };
     });
     S.prodDirty = false; S.imp = null; S.conferma = ''; S.fg = null; S.fornMod = false;
   }
@@ -1222,11 +1228,13 @@ var URL_APP = location.origin + location.pathname;
       refSel + '<button class="btn" data-act="salva-dati">' + (d.nuovo ? 'Crea ordine e aggiungi i prodotti' : 'Salva dati') + '</button></div>';
   }
 
-  var CAMPI_IMP = [['nome', 'Nome del prodotto', /^\s*(descr|prodott|nome|tipologia|articolo)/i, 'obbligatorio'], ['dettaglio', 'Altra descrizione', /^\s*descr\w*\s*1|dettagl/i, 'aggiunta al nome per distinguere prodotti simili, es. trafila ruvida'], ['dettaglio2', 'Altra descrizione (2)', /^\s*descr\w*\s*[2-9]/i, 'aggiunta anche questa al nome, es. semola integrale'], ['categoria', 'Categoria', /categ|tipo prod|reparto/i, 'per raggruppare i prodotti, facoltativa'], ['codice', 'Codice articolo', /^\s*cod/i, 'aggiunto al nome solo se due prodotti hanno nome e descrizioni identici'],
+  var CAMPI_IMP = [['nome', 'Nome del prodotto', /^\s*(descr|prodott|nome|tipologia|articolo)/i, 'obbligatorio'], ['dettaglio', 'Altra descrizione', /^\s*descr\w*\s*1|dettagl|piccola\s*descr/i, 'aggiunta al nome per distinguere prodotti simili, es. trafila ruvida'], ['dettaglio2', 'Altra descrizione (2)', /^\s*descr\w*\s*[2-9]/i, 'aggiunta anche questa al nome, es. semola integrale'], ['categoria', 'Categoria', /categ|tipo prod|reparto/i, 'per raggruppare i prodotti, facoltativa'], ['codice', 'Codice articolo', /^\s*cod/i, 'aggiunto al nome solo se due prodotti hanno nome e descrizioni identici'],
+    ['minimo', 'Minimo ordinabile', /minimo|pezzatura/i, 'per i prodotti al kg: es. 300 g, poi il socio sceglie i grammi'],
+    ['peso_intero', 'Peso del pezzo intero', /intero|intera/i, 'per chi compra il pezzo intero, es. 1200 g'],
     ['formato', 'Confezione o formato', /formato|peso|confez|stile/i, 'es. cassa 15 kg, 500 g'],
     ['prezzo', 'Prezzo', /ivato|prezzo|€|euro|listino/i, 'obbligatorio: il prezzo che pagano i soci (prima degli sconti dell\'ordine)'], ['qta_conf', 'Pezzi per cartone', /pezzi|cartone|conf\.|n\. ?pz/i, 'solo se si ordina a cartoni e il prezzo è del singolo pezzo'],
     ['varianti', 'Varianti', /variet|varian|gusto/i, 'es. varietà di mele, separate da virgola, facoltative'],
-    ['tipo_ordine', 'Si ordina a pezzi o a peso', /tipo ordine|si ordina|^unit|pezzo\s*\/\s*peso|peso\s*\/\s*pezzo/i, 'colonna con “pz” o “peso”: “peso” = il socio ordina in kg']];
+    ['tipo_ordine', 'Si ordina a pezzi o a peso', /tipo ordine|tipologia|si ordina|^unit|pezzo\s*\/\s*peso|peso\s*\/\s*pezzo/i, 'colonna con “pz” o “peso”: “peso” = il socio ordina in kg']];
 
   function tProdotti() {
     var o = S.data.ordine, k = coeff(o.sconti);
@@ -1242,6 +1250,7 @@ var URL_APP = location.origin + location.pathname;
         '<label class="f">Si ordina a<input type="text" data-pe="unita" data-i="' + i + '" value="' + h(p.unita) + '" placeholder="pz, cartone, cassa, kg"></label>' +
         '<label class="f">Pezzi (o kg) per confezione<input type="text" inputmode="decimal" data-pe="qta_conf" data-i="' + i + '" value="' + h(qt(p.qta_conf || 1)) + '"></label>' +
         '<label class="f">Prezzo di listino<span class="hint">per pezzo o per kg</span><input type="text" inputmode="decimal" data-pe="prezzo" data-i="' + i + '" value="' + h(String(p.prezzo).replace('.', ',')) + '"></label>' +
+        '<label class="f">Minimo ordinabile<span class="hint">per i prodotti “a kg”: in kg, es. 0,3 = 300 g. Il socio sceglie poi i grammi</span><input type="text" inputmode="decimal" data-pe="minimo" data-i="' + i + '" value="' + h(p.minimo ? String(p.minimo).replace('.', ',') : '') + '" placeholder="Es. 0,3"></label>' +
         '<label class="f">Varianti<span class="hint">separate da virgola</span><input type="text" data-pe="varianti" data-i="' + i + '" value="' + h(p.varianti) + '" placeholder="Es. Golden, Opal, Gala"></label></div>' +
         '<label class="f">Contenuto della cassetta<span class="hint">facoltativo: un prodotto per riga. Il socio ordina solo il numero di cassette e può escludere qualche prodotto</span><textarea rows="4" data-pe="contenuto" data-i="' + i + '" placeholder="Patate&#10;Carote&#10;Cavolo verza&#10;…">' + h(p.contenuto || '') + '</textarea></label>' +
         (p.contenuto ? '<label class="f">Esclusioni massime per socio<span class="hint">vuoto = nessun limite</span><input type="text" inputmode="numeric" data-pe="max_esclusi" data-i="' + i + '" value="' + h(p.max_esclusi || '') + '" placeholder="Es. 2"></label>' : '') +
@@ -1288,7 +1297,7 @@ var URL_APP = location.origin + location.pathname;
     var mostra = trovati.slice(0, 50);
     var tabella = '<div class="table-wrap" style="max-height:420px;overflow-y:auto"><table><tr><th>Prodotto</th><th>Confezione</th><th class="r">Prezzo</th></tr>' +
       mostra.map(function (p) {
-        return '<tr><td><b>' + h(p.nome) + '</b>' + (p.varianti ? '<div class="small muted">varianti: ' + h(p.varianti) + '</div>' : '') + (p.contenuto ? '<div class="small">dentro (si possono escludere): ' + h(p.contenuto.split('\n').join(', ')) + '</div>' : '') + '</td><td>' + h(p.formato) + (p.qta_conf !== 1 ? ' · ' + qt(p.qta_conf) + ' pz' : '') + '<div class="small muted">si ordina a ' + h(p.unita) + '</div></td><td class="r">' + eur(p.prezzo) + (p.peso_variabile ? '<div class="small muted">al kg, a peso reale</div>' : '') + '</td></tr>';
+        return '<tr><td><b>' + h(p.nome) + '</b>' + (p.varianti ? '<div class="small muted">varianti: ' + h(p.varianti) + '</div>' : '') + (p.contenuto ? '<div class="small">dentro (si possono escludere): ' + h(p.contenuto.split('\n').join(', ')) + '</div>' : '') + '</td><td>' + h(p.formato) + (p.qta_conf !== 1 && !p.peso_variabile ? ' · ' + qt(p.qta_conf) + ' pz' : '') + '<div class="small muted">' + (p.minimo ? 'a peso, minimo ' + Math.round(p.minimo * 1000) + ' g' : 'si ordina a ' + h(p.unita)) + '</div></td><td class="r">' + eur(p.prezzo) + (p.peso_variabile ? '<div class="small muted">al kg, a peso reale</div>' : '') + '</td></tr>';
       }).join('') + '</table></div>' + (trovati.length > mostra.length ? '<div class="small muted">… e altri ' + (trovati.length - mostra.length) + '</div>' : '');
     var correggi = '<details' + (trovati.length ? '' : ' open') + '><summary>I prodotti non sono giusti? Correggi</summary><div class="stack" style="margin-top:8px">' +
       '<p class="small">Per ogni voce scegli la colonna del foglio da cui prenderla. Accanto a ogni colonna vedi un esempio del suo contenuto.</p>' + origine +
@@ -1436,9 +1445,14 @@ var URL_APP = location.origin + location.pathname;
     var righe = im.intest ? im.righe.slice(1) : im.righe;
     var bello = function (t) { t = String(t || '').trim(); return (t && t === t.toUpperCase() && /[A-Z]/.test(t)) ? t.charAt(0) + t.slice(1).toLowerCase() : t; };
     var UNITA = ['cassa', 'cassetta', 'plateau', 'sacco', 'sacchi', 'vaso', 'bottiglia', 'cartone', 'fusto', 'barattolo', 'confezione', 'pacco', 'latta', 'busta', 'vasetto', 'scatola'];
+    var extra = [];
+    var prezzoKgTit = im.intest && m.prezzo !== undefined && m.prezzo !== '' && /\bkg\b|al\s*chil/i.test(String(im.righe[0][m.prezzo] || ''));
+    var catCorr = '';
     var out = righe.map(function (r) {
       var g = function (k) { return m[k] === undefined || m[k] === '' ? '' : String(r[m[k]] || '').trim(); };
       var nome = g('nome'), varianti = g('varianti');
+      // riga con solo un titolo (es. "CAPRA", "SECCHI"): è la categoria dei prodotti che seguono
+      if (nome && !numIt(g('prezzo')) && r.filter(function (c) { return String(c || '').trim(); }).length === 1) { catCorr = nome.charAt(0) + nome.slice(1).toLowerCase(); return { nome: '' }; }
       var mm = nome.match(/^([^:]{2,40}):\s*(.+,.+)$/);
       if (mm && !varianti) { nome = mm[1]; varianti = mm[2]; }
       varianti = varianti.split(/\s*,\s*/).filter(Boolean).map(function (v) { return v.charAt(0).toUpperCase() + v.slice(1); }).join(', ');
@@ -1455,10 +1469,33 @@ var URL_APP = location.origin + location.pathname;
       var alKg = /(^|[^a-z])kg\b|al\s*kg|al\s*chil|\/\s*kg/i.test(prezzoTesto) || /prezzo al kg/i.test(formato);
       if (alKg && !/prezzo al kg/i.test(formato)) formato = formato ? formato + ' · prezzo al kg' : 'prezzo al kg';
       var dett = [g('dettaglio'), g('dettaglio2')].filter(function (d) { return d && normNome(nome).indexOf(normNome(d)) < 0; });
-      if (dett.length) nome = bello(nome) + ' – ' + dett.join(', ');
+      // "Tiglio, acacia, rovo, castagno": una lista di gusti diventa le varianti
+      if (!varianti && dett.length === 1 && (dett[0].match(/,/g) || []).length >= 2) { varianti = dett[0].split(/\s*,\s*|\s+e\s+/).filter(Boolean).map(function (v) { return v.charAt(0).toUpperCase() + v.slice(1); }).join(', '); dett = []; }
+      // descrizioni brevi ("dolce", "magro") nel nome, quelle lunghe ("solitamente si usa sulla pizza") sotto, in piccolo
+      dett = dett.map(function (d) { return d === d.toUpperCase() && /[A-Z]/.test(d) ? d.charAt(0) + d.slice(1).toLowerCase() : d; });
+      var lunghe = dett.filter(function (d) { return d.length > 22; }), corte = dett.filter(function (d) { return d.length <= 22; });
+      if (corte.length) nome = bello(nome) + ' – ' + corte.join(', ').toLowerCase();
+      if (lunghe.length) formato = formato ? formato + ' · ' + lunghe.join(' · ') : lunghe.join(' · ');
       var nonOrd = r.some(function (c) { return /non\s*ordinabil/i.test(String(c)); });
-      return { nome: bello(nome), categoria: bello(g('categoria')), formato: formato, prezzo: numIt(prezzoTesto), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: alKg, disponibile: true, riga: r, nonOrd: nonOrd };
+      var p0 = { nome: bello(nome), categoria: bello(g('categoria')) || catCorr, formato: formato, prezzo: numIt(prezzoTesto), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: alKg, disponibile: true, riga: r, nonOrd: nonOrd };
+      // listini con il prezzo al kg nel titolo della colonna (es. formaggi freschi)
+      var tipo = g('tipo_ordine').toLowerCase(), gMin = grammi(g('minimo')), gInt = grammi(g('peso_intero')), gFor = grammi(g('formato'));
+      if (prezzoKgTit && !im.unita) {
+        if (/pezz|etto|peso|kg/.test(tipo) && !/confez|cadaun|vasett/.test(tipo)) {
+          p0.unita = 'kg'; p0.qta_conf = 1; p0.peso_variabile = true; p0.formato = lunghe.join(' · '); p0.minimo = gMin ? gMin / 1000 : '';
+          var mi = String(g('tipo_ordine')).match(/inter[oa][^\d]*(\d+(?:[.,]\d+)?)/i);
+          if (mi && (gInt || gFor)) extra.push({ nome: p0.nome + ' – intero', categoria: p0.categoria, formato: 'circa ' + (gInt || gFor) + ' g · prezzo al kg', prezzo: numIt(mi[1]), qta_conf: (gInt || gFor) / 1000, varianti: '', unita: 'pezzo intero', peso_variabile: true, disponibile: true, riga: r, nonOrd: false, dopo: p0 });
+        } else {
+          var range = /\d\s*-\s*\d/.test(g('peso_intero') + ' ' + g('formato') + ' ' + g('minimo'));
+          p0.unita = /cadaun/.test(tipo) ? 'pz' : (/vasett/.test(tipo) ? 'vasetto' : 'confezione');
+          if (range && (gInt || gFor)) { p0.qta_conf = (gInt || gFor) / 1000; p0.peso_variabile = true; p0.formato = ['circa ' + (gInt || gFor) + ' g · prezzo al kg'].concat(lunghe).join(' · '); }
+          else { p0.peso_variabile = false; p0.formato = [(gInt || gFor || gMin) ? (gInt || gFor || gMin) + ' g' : ''].concat(lunghe).filter(Boolean).join(' · '); }
+        }
+      }
+      return p0;
     }).filter(function (p) { return p.nome && (p.prezzo > 0 || p.nonOrd); });
+    // "a pezzi o intero (costo 6,4)": il pezzo intero diventa un prodotto subito dopo
+    extra.forEach(function (x) { var i = out.indexOf(x.dopo); delete x.dopo; if (i >= 0) out.splice(i + 1, 0, x); });
     // righe "NON ORDINABILI": sono il contenuto della cassetta che le precede (il socio potrà escluderle)
     var cassa = null, tenuti = [];
     out.forEach(function (p) {
@@ -1479,6 +1516,16 @@ var URL_APP = location.origin + location.pathname;
       if (cod && conta[normNome(p.nome) + '|' + normNome(p.formato)] > 1) p.nome += ' (' + cod + ')';
     });
     return out;
+  }
+
+  /** "400 GRAMMI", "1,2 kg", "400-500 gr" (media) → grammi; 0 se non c'è un peso */
+  function grammi(t) {
+    t = String(t || '').toLowerCase().replace(',', '.');
+    var m = t.match(/(\d+(?:\.\d+)?)\s*(?:-\s*(\d+(?:\.\d+)?))?\s*(kg|chil|g|gr|grammi|etti|hg)?/);
+    if (!m) return 0;
+    var a = parseFloat(m[1]), b = m[2] ? parseFloat(m[2]) : a, v = (a + b) / 2, u = m[3] || '';
+    if (/kg|chil/.test(u)) v *= 1000; else if (/etti|hg/.test(u)) v *= 100; else if (!u && v < 10) v *= 1000;
+    return Math.round(v);
   }
 
   /* ---- quantità già ordinate dai soci (una colonna per socio) ---- */
@@ -2157,6 +2204,12 @@ var URL_APP = location.origin + location.pathname;
       return;
     }
     if (ds.gordine) { vai('gOrdine', { id: ds.gordine }); return; }
+    if (ds.step && aGrammi(prodDi(ds.p))) {
+      var pp0 = prodDi(ds.p), rr0 = qtaDi(ds.p, ds.v || ''), cur = rr0 ? rr0.quantita : 0, pas = pp0.passo || 0.1, nq;
+      if (Number(ds.step) > 0) nq = cur < pp0.minimo - 1e-9 ? pp0.minimo : cur + pas;
+      else nq = cur - pas < pp0.minimo - 1e-9 ? 0 : cur - pas;
+      cambiaQta(ds.p, ds.v || '', Math.round(nq * 1000) / 1000); return;
+    }
     if (ds.step) { var inp = t.parentNode.querySelector('input'); cambiaQta(ds.p, ds.v || '', (Number(inp.value) || 0) + Number(ds.step)); return; }
     if (ds.per !== undefined && t.classList.contains('chip')) { S.perConto = ds.per; disegna(); return; }
     if (ds.vista) { try { localStorage.setItem('gas_vista', ds.vista); } catch (e) {} disegna(); return; }
@@ -2275,7 +2328,7 @@ var URL_APP = location.origin + location.pathname;
         var aggiornati = 0, aggiunti = [];
         nuovi.forEach(function (p) {
           var e = (esistenti[chiaveP(p)] || []).shift();
-          if (e) { ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); if (p.codice) e.codice = p.codice; if (p.contenuto) e.contenuto = p.contenuto; if (p.peso_variabile) e.peso_variabile = true; p.id = e.id; aggiornati++; }
+          if (e) { ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); if (p.codice) e.codice = p.codice; if (p.contenuto) e.contenuto = p.contenuto; if (p.minimo) e.minimo = p.minimo; if (p.peso_variabile) e.peso_variabile = true; p.id = e.id; aggiornati++; }
           else { p.id = 'n' + Math.random().toString(36).slice(2, 11); aggiunti.push(p); }
         });
         var daImp = righeImport(nuovi, colQ).map(function (x) {
@@ -2382,7 +2435,7 @@ var URL_APP = location.origin + location.pathname;
     }
     if (t.dataset.pe !== undefined && t.type !== 'checkbox') {
       var p = S.prodEdit[+t.dataset.i], k = t.dataset.pe;
-      p[k] = (k === 'prezzo' || k === 'qta_conf') ? numIt(t.value) : t.value;
+      p[k] = (k === 'prezzo' || k === 'qta_conf' || k === 'minimo') ? numIt(t.value) : t.value;
       S.prodAperto = +t.dataset.i;
       if (!S.prodDirty) { S.prodDirty = true; document.querySelectorAll('[data-act="p-salva"]').forEach(function (b) { b.disabled = false; b.textContent = b.dataset.i !== undefined ? 'Salva' : 'Salva le modifiche'; if (b.dataset.i === undefined) b.style.cssText = 'position:sticky;bottom:84px;z-index:6;box-shadow:0 4px 14px rgba(0,0,0,.25)'; }); }
     }
@@ -2390,6 +2443,11 @@ var URL_APP = location.origin + location.pathname;
 
   document.addEventListener('change', function (ev) {
     var t = ev.target, ds = t.dataset;
+    if (ds.qty !== undefined && aGrammi(prodDi(ds.p))) {
+      var pg0 = prodDi(ds.p), kg = (Number(String(t.value).replace(',', '.')) || 0) / 1000;
+      if (kg > 0 && kg < pg0.minimo - 1e-9) { kg = pg0.minimo; toast('Il minimo è ' + Math.round(pg0.minimo * 1000) + ' g'); }
+      cambiaQta(ds.p, ds.v || '', Math.round(kg * 1000) / 1000); return;
+    }
     if (ds.qty !== undefined) { cambiaQta(ds.p, ds.v || '', t.value); return; }
     if (ds.nota !== undefined) { var r = qtaDi(ds.p, ds.v || ''); if (r) cambiaQta(ds.p, ds.v || '', r.quantita, t.value); return; }
     if (t.id === 'imp-file' && t.files && t.files[0]) { leggiFile(t.files[0]); return; }
@@ -2399,7 +2457,7 @@ var URL_APP = location.origin + location.pathname;
     if (ds.fgi !== undefined) { S.fg.righe[+ds.fgi].importo = Math.round(numIt(t.value) * 100) / 100; disegna(); return; }
     if (ds.pe !== undefined) {
       var p = S.prodEdit[+ds.i]; S.prodAperto = +ds.i;
-      if (t.type === 'checkbox') p[ds.pe] = t.checked; else if (ds.pe === 'prezzo' || ds.pe === 'qta_conf') p[ds.pe] = numIt(t.value); else p[ds.pe] = t.value;
+      if (t.type === 'checkbox') p[ds.pe] = t.checked; else if (ds.pe === 'prezzo' || ds.pe === 'qta_conf' || ds.pe === 'minimo') p[ds.pe] = numIt(t.value); else p[ds.pe] = t.value;
       S.prodDirty = true; disegna(); return;
     }
     if (ds.map) { S.imp.mappa[ds.map] = t.value === '' ? '' : +t.value; disegna(); return; }
