@@ -1524,7 +1524,7 @@ var URL_APP = location.origin + location.pathname;
     var m = t.match(/(\d+(?:\.\d+)?)\s*(?:-\s*(\d+(?:\.\d+)?))?\s*(kg|chil|g|gr|grammi|etti|hg)?/);
     if (!m) return 0;
     var a = parseFloat(m[1]), b = m[2] ? parseFloat(m[2]) : a, v = (a + b) / 2, u = m[3] || '';
-    if (/kg|chil/.test(u)) v *= 1000; else if (/etti|hg/.test(u)) v *= 100; else if (!u && v < 10) v *= 1000;
+    if (/kg|chil/.test(u)) v *= 1000; else if (/etti|hg/.test(u)) v *= 100; else if (!u && v < 10) return 0;   // "2" senza unità è un numero di pezzi, non un peso
     return Math.round(v);
   }
 
