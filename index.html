@@ -331,6 +331,15 @@ var URL_APP = location.origin + location.pathname;
   function qtaTxt(p, q) { return aGrammi(p) ? (q >= 1 ? qt(q) + ' kg' : Math.round(q * 1000) + ' g') : qt(q) + ' ' + (p ? p.unita : ''); }
   function valQ(p, q) { return aGrammi(p) ? Math.round((q || 0) * 1000) : (q || 0); }
   function minTxt(p) { return p.minimo ? 'minimo ' + (aGrammi(p) ? Math.round(p.minimo * 1000) + ' g' : qt(p.minimo) + ' ' + p.unita) : ''; }
+  /* per le confezioni a peso (dolcini ~450 g, filone intero…): il prezzo al kg scritto chiaro sotto il nome */
+  function formatoVis(p) {
+    var f = String(p.formato || '');
+    if (p.peso_variabile && !aGrammi(p) && p.qta_conf !== 1 || /prezzo al kg/i.test(f)) {
+      var kg = eur(p.prezzo_kg) + ' al kg';
+      f = /prezzo al kg/i.test(f) ? f.replace(/prezzo al kg/i, kg) : (f ? f + ' · ' + kg : kg);
+    }
+    return f;
+  }
   function prodDi(pid) { return (S.data.prodotti || []).filter(function (x) { return x.id === pid; })[0]; }
   function qt(n) { return (Number(n) || 0).toLocaleString('it-IT', { maximumFractionDigits: 2 }); }
   var GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
@@ -386,6 +395,7 @@ var URL_APP = location.origin + location.pathname;
   function pill(stato) { return '<span class="pill ' + h(stato) + '">' + h(NOMI_STATO[stato] || stato) + '</span>'; }
   function confTxt(p) {
     var u = p.unita || 'pz';
+    if (p.qta_conf && p.qta_conf !== 1 && p.peso_variabile) return u;   // il peso è già scritto ("circa 450 g · 17,90 € al kg")
     if (p.qta_conf && p.qta_conf !== 1) return u + ' da ' + qt(p.qta_conf) + (/kg|g$/.test(u) ? '' : ' pz');
     return u;
   }
@@ -862,7 +872,7 @@ var URL_APP = location.origin + location.pathname;
       if (comp && p.disponibile && varianti.length === 1 && !varianti[0] && !(p.contenuto && p.contenuto.length) && !(p.divisibile && mod)) {
         // una riga sola: nome e prezzo a sinistra, + e − a destra
         var r1 = qtaDi(p.id, ''), q1 = r1 ? r1.quantita : 0;
-        var meta = [p.formato, aGrammi(p) ? 'scegli i grammi' : confTxt(p), minTxt(p), p.peso_variabile && !aGrammi(p) ? 'a peso reale' : ''].filter(Boolean).join(' · ');
+        var meta = [formatoVis(p), aGrammi(p) ? 'scegli i grammi' : confTxt(p), minTxt(p), p.peso_variabile && !aGrammi(p) ? 'a peso reale' : ''].filter(Boolean).join(' · ');
         var ctrl1 = mod
           ? '<div class="stepper"><button class="step" data-step="-1" data-p="' + h(p.id) + '" data-v="" aria-label="Togli uno">−</button>' +
             '<input type="number" inputmode="decimal" min="0" step="' + (aGrammi(p) ? 50 : 1) + '"' + (aGrammi(p) ? ' style="width:58px"' : '') + ' value="' + valQ(p, q1) + '" data-qty data-p="' + h(p.id) + '" data-v="" aria-label="Quantità ' + h(p.nome) + '" id="q-' + h(p.id) + '-">' +
@@ -877,7 +887,7 @@ var URL_APP = location.origin + location.pathname;
       }
       out += '<div class="prod ' + (ha ? 'has ' : '') + (p.disponibile ? '' : 'off') + '">' +
         '<div class="row between" style="align-items:flex-start"><div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
-        '<div class="muted small">' + h([p.formato, aGrammi(p) ? 'scegli i grammi' : confTxt(p), minTxt(p)].filter(Boolean).join(' · ')) + '</div></div>' +
+        '<div class="muted small">' + h([formatoVis(p), aGrammi(p) ? 'scegli i grammi' : confTxt(p), minTxt(p)].filter(Boolean).join(' · ')) + '</div></div>' +
         '<div class="prezzo num" style="text-align:right">' + (p.da_pesare ? eur(p.prezzo_kg) + '<div class="muted small" style="font-weight:400">al kg</div>' : eur(p.prezzo_unita) + '<div class="muted small" style="font-weight:400">a ' + h(p.unita) + '</div>') + '</div></div>' +
         (p.da_pesare ? '<div class="muted small">Si paga a peso: l\'importo lo sai dopo la pesata.</div>' : p.peso_variabile ? '<div class="muted small">Prezzo indicativo: si paga in base al peso reale.</div>' : '') +
         (!p.disponibile ? '<div class="small"><b>Al momento non disponibile</b></div>' :
