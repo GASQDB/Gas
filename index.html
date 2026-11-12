@@ -854,7 +854,7 @@ var URL_APP = location.origin + location.pathname;
     }).join('') + '<div class="li"><div class="grow"><b>Totale pezzi</b></div><div class="amt num"><b>' + eur(mp.reduce(function (a, x) { return a + x.importo; }, 0)) + '</b></div></div></div>' +
       '<div class="muted small">L’importo da pagare è in “I miei conti”.</div></div>' : '';
     return testa + '<div class="stack-lg">' + info + pesati + avvisi + chi + '<div class="stack">' + cerca + lista + '</div>' +
-      '<div class="card"><h3>Riepilogo del tuo ordine</h3><div id="riepilogo-mio"></div></div></div>';
+      '<div class="card"><h3>Riepilogo del tuo ordine</h3><div id="riepilogo-mio"></div></div>' + tuttiHtml() + '</div>';
   }
   function listaProdotti() {
     var d = S.data, mod = d.modificabile, cat = null, out = '';
@@ -882,7 +882,7 @@ var URL_APP = location.origin + location.pathname;
           (r1 && r1.note ? '<div class="muted small">Nota: ' + h(r1.note) + '</div>' : '');
         out += '<div class="prod riga1' + (ha ? ' has' : '') + '"><div class="riga1-in"><div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
           '<div class="muted small">' + h(meta) + '</div></div>' +
-          '<div class="prezzo num">' + (p.da_pesare ? eur(p.prezzo_kg) + '<div class="muted small">al kg</div>' : eur(p.prezzo_unita) + '<div class="muted small">a ' + h(p.unita) + '</div>') + '</div>' + ctrl1 + '</div>' + nota1 + '</div>';
+          '<div class="prezzo num">' + (p.da_pesare ? eur(p.prezzo_kg) + '<div class="muted small">al kg</div>' : eur(p.prezzo_unita) + '<div class="muted small">a ' + h(p.unita) + '</div>') + '</div>' + ctrl1 + '</div>' + nota1 + chiAltri(p) + '</div>';
         return;
       }
       out += '<div class="prod ' + (ha ? 'has ' : '') + (p.disponibile ? '' : 'off') + '">' +
@@ -901,11 +901,37 @@ var URL_APP = location.origin + location.pathname;
             var nota = (qv > 0 && mod) ? '<input type="text" class="small" placeholder="Nota (facoltativa), es. ben matura" value="' + h(r.note || '') + '" data-nota data-p="' + h(p.id) + '" data-v="' + h(v) + '" style="min-height:42px">' :
               (r && r.note ? '<div class="muted small">Nota: ' + h(r.note) + '</div>' : '');
             return '<div class="qty-line">' + (v ? '<span class="var-name">' + h(v) + '</span>' : '<span></span>') + ctrl + '</div>' + (nota ? '<div class="nota-v">' + nota + '</div>' : '');
-          }).join('') + '</div>') + contenutoHtml(p, mod) + quoteHtml(p, varianti, mod) +
+          }).join('') + '</div>') + contenutoHtml(p, mod) + quoteHtml(p, varianti, mod) + chiAltri(p) +
         '</div>';
     });
     return out;
   }
+  /* chi altro ha preso questo prodotto (come le colonne del foglio Excel) */
+  function chiAltri(p) {
+    var lista = [];
+    (S.data.altri || []).forEach(function (a) {
+      a.righe.forEach(function (r) {
+        if (r.prodotto_id !== p.id) return;
+        var q = r.quota ? r.quota.replace('/', ' su ') : (aGrammi(p) ? qtaTxt(p, r.quantita) : qt(r.quantita));
+        lista.push((a.per_conto || a.nome) + ' ' + q + (r.variante ? ' ' + r.variante : ''));
+      });
+    });
+    if (!lista.length) return '';
+    var mostra = lista.slice(0, 5).join(', ') + (lista.length > 5 ? ' e altri ' + (lista.length - 5) : '');
+    return '<div class="small muted" style="margin-top:2px">L’hanno preso: ' + h(mostra) + '</div>';
+  }
+  function tuttiHtml() {
+    var al = S.data.altri || [];
+    if (!al.length) return '';
+    return '<details class="card"><summary>Cosa hanno ordinato gli altri (' + al.length + ')</summary><div class="list" style="margin-top:6px">' + al.map(function (a) {
+      return '<div class="li"><div class="grow"><b>' + h(a.nome) + '</b>' + (a.per_conto ? ' <span class="muted">per ' + h(a.per_conto) + '</span>' : '') +
+        '<div class="small muted">' + a.righe.map(function (r) {
+          var p = prodDi(r.prodotto_id);
+          return h((r.quota ? r.quota.replace('/', ' su ') : (aGrammi(p) ? qtaTxt(p, r.quantita) : qt(r.quantita))) + ' ' + r.prodotto + (r.variante ? ' ' + r.variante : '') + (r.esclusi ? ' (senza ' + r.esclusi + ')' : ''));
+        }).join(' · ') + '</div></div><div class="amt num">' + conPeso(a.dovuto, a.da_pesare) + (a.pagato ? '<div class="small" style="color:var(--ok)">pagato</div>' : '') + '</div></div>';
+    }).join('') + '</div></details>';
+  }
+
   /* quote condivise: mezza o un terzo di cassa */
   function rigaQuota(pid, v, dd) {
     return S.data.mie_righe.filter(function (x) { return x.prodotto_id === pid && (x.variante || '') === (v || '') && Number(x.quota) === dd && (x.per_conto || '') === S.perConto; })[0];
@@ -1229,6 +1255,7 @@ var URL_APP = location.origin + location.pathname;
         '<select id="o-quote">' + [['', 'No, solo confezioni intere'], ['2', 'Sì, a metà (½)'], ['2,3', 'Sì, a metà o in tre (½ e ⅓)']].map(function (x) {
           var cur = Array.isArray(o.quote) ? o.quote.join(',') : String(o.quote || '');
           return '<option value="' + x[0] + '"' + (cur === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label>' +
+      '<label class="check"><input type="checkbox" id="o-riservato"' + (o.riservato ? ' checked' : '') + '> Ordine riservato: i soci non vedono cosa hanno ordinato gli altri</label>' +
       '<label class="f">Note per i soci<textarea id="o-note" placeholder="Es. punto di ritiro, orari, IBAN per il bonifico">' + h(o.note) + '</textarea></label>' +
       (d.nuovo ? '<p class="small muted" style="margin:0">Dopo aver creato l’ordine potrai aggiungere un’immagine (logo del fornitore o disegno del prodotto).</p>' :
         '<div style="display:flex;flex-direction:column;gap:6px"><b style="font-size:0.95rem">Immagine dell’ordine</b><span class="small muted">logo del fornitore o disegno del prodotto: i soci la vedono sulla scheda dell’ordine. Gli ordini nuovi dello stesso fornitore la riprendono da soli.</span>' +
@@ -2170,7 +2197,7 @@ var URL_APP = location.origin + location.pathname;
   /* ========== eventi ========== */
   function salvaDati() {
     var g = function (id) { var el = document.getElementById(id); return el ? el.value : undefined; };
-    var d = { id: S.data.nuovo ? '' : S.data.ordine.id, fornitore_id: g('o-forn'), titolo: g('o-titolo'), fornitore: g('o-fornitore'), chiusura: g('o-chiusura'), ora_chiusura: g('o-ora'), quote: g('o-quote'), consegna: g('o-consegna'), pagamento: g('o-pag'), sconti: g('o-sconti'), note: g('o-note'), referente_id: g('o-ref') };
+    var d = { id: S.data.nuovo ? '' : S.data.ordine.id, fornitore_id: g('o-forn'), titolo: g('o-titolo'), fornitore: g('o-fornitore'), chiusura: g('o-chiusura'), ora_chiusura: g('o-ora'), quote: g('o-quote'), riservato: (document.getElementById('o-riservato') || {}).checked ? '1' : '', consegna: g('o-consegna'), pagamento: g('o-pag'), sconti: g('o-sconti'), note: g('o-note'), referente_id: g('o-ref') };
     call('salvaOrdine', d).then(function (r) {
       toast(r.riaperto ? 'Salvato: con la nuova data l’ordine è di nuovo aperto' : 'Salvato');
       var nuovo = S.data.nuovo;
