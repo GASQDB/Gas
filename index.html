@@ -920,10 +920,36 @@ var URL_APP = location.origin + location.pathname;
     var mostra = lista.slice(0, 5).join(', ') + (lista.length > 5 ? ' e altri ' + (lista.length - 5) : '');
     return '<div class="small muted" style="margin-top:2px">L’hanno preso: ' + h(mostra) + '</div>';
   }
+  /* riepilogo per la consegna: lo vedono tutti, così qualunque socio può sostituire il referente */
+  function consegnaHtml() {
+    var d = S.data, al = d.altri; if (!al) return '';
+    var tot = {}, ordine = [];
+    var somma = function (pid, v, q, quota) {
+      var k = pid + '|' + (v || '');
+      if (!tot[k]) { tot[k] = { pid: pid, v: v || '', q: 0, parti: 0 }; ordine.push(k); }
+      if (quota) tot[k].parti += q; else tot[k].q += q;
+    };
+    al.forEach(function (a) { a.righe.forEach(function (r) { somma(r.prodotto_id, r.variante, r.quota ? Number(String(r.quota).split('/')[0]) / Number(String(r.quota).split('/')[1]) : r.quantita, !!r.quota); }); });
+    (d.mie_righe || []).forEach(function (r) { if (r.quantita > 0) somma(r.prodotto_id, r.variante, r.quota ? r.quantita / r.quota : r.quantita, !!r.quota); });
+    var pos = {}; (d.prodotti || []).forEach(function (p, i) { pos[p.id] = i; });
+    ordine.sort(function (a, b) { return (pos[tot[a].pid] || 0) - (pos[tot[b].pid] || 0); });
+    if (!ordine.length) return '';
+    var righe = ordine.map(function (k) {
+      var x = tot[k], p = prodDi(x.pid) || { nome: '?', unita: '' };
+      var q = x.q + Math.ceil(x.parti - 1e-9);
+      return '<tr><td>' + h(p.nome) + (x.v ? ' <b>' + h(x.v) + '</b>' : '') + '</td><td class="r">' + h(aGrammi(p) ? qtaTxt(p, q) : qt(q) + ' ' + p.unita) + '</td></tr>';
+    }).join('');
+    var io = d.socio_ordine ? d.socio_ordine.nome : '';
+    return '<details class="card"><summary>Riepilogo per la consegna</summary><div class="stack" style="margin-top:6px">' +
+      '<p class="small muted" style="margin:0">Se il referente non c’è, con questo elenco chiunque può controllare la merce del fornitore e consegnarla: sopra i totali da ricevere, sotto cosa spetta a ognuno.</p>' +
+      '<div class="table-wrap"><table><tr><th>Prodotto</th><th class="r">Totale</th></tr>' + righe + '</table></div>' +
+      '<div class="small"><b>' + h(io) + '</b> (tu): ' + h((d.mie_righe || []).filter(function (r) { return r.quantita > 0; }).map(function (r) { var p = prodDi(r.prodotto_id) || {}; return (r.quota ? fraz(r.quantita, r.quota) : (aGrammi(p) ? qtaTxt(p, r.quantita) : qt(r.quantita))) + ' ' + (p.nome || '') + (r.variante ? ' ' + r.variante : ''); }).join(' · ') || 'niente') + '</div>' +
+      '</div></details>';
+  }
   function tuttiHtml() {
     var al = S.data.altri || [];
-    if (!al.length) return '';
-    return '<details class="card"><summary>Cosa hanno ordinato gli altri (' + al.length + ')</summary><div class="list" style="margin-top:6px">' + al.map(function (a) {
+    if (!al.length) return consegnaHtml();
+    return consegnaHtml() + '<details class="card"><summary>Cosa hanno ordinato gli altri (' + al.length + ')</summary><div class="list" style="margin-top:6px">' + al.map(function (a) {
       return '<div class="li"><div class="grow"><b>' + h(a.nome) + '</b>' + (a.per_conto ? ' <span class="muted">per ' + h(a.per_conto) + '</span>' : '') +
         '<div class="small muted">' + a.righe.map(function (r) {
           var p = prodDi(r.prodotto_id);
