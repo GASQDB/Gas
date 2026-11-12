@@ -1251,7 +1251,7 @@ var URL_APP = location.origin + location.pathname;
     var imp = S.imp ? impPanel() : '<button class="btn ghost" data-act="imp-apri">Importa il listino: PDF, Excel o Google</button>';
     var lista = S.prodEdit.map(function (p, i) {
       var pu = numIt(p.prezzo) * (numIt(p.qta_conf) || 1) * k;
-      return '<div class="card"><div class="row between"><div class="grow"><b>' + (i + 1) + '. ' + h(p.nome || 'Nuovo prodotto') + '</b>' + (p.formato || p.varianti ? '<div class="small muted">' + h([p.formato, p.varianti].filter(Boolean).join(' · ')) + '</div>' : '') + '</div><span class="num">' + eur(pu) + ' a ' + h(p.unita || 'pz') + '</span></div>' +
+      return '<div class="card"><div class="row between"><div class="grow"><b>' + (i + 1) + '. ' + h(p.nome || 'Nuovo prodotto') + '</b>' + (p.formato || p.varianti ? '<div class="small muted">' + h([String(p.formato || '').replace(/prezzo al kg/i, eur(numIt(p.prezzo) * k) + ' al kg'), p.varianti].filter(Boolean).join(' · ')) + '</div>' : '') + '</div><span class="num">' + eur(pu) + ' a ' + h(p.unita || 'pz') + '</span></div>' +
         '<details data-pd="' + i + '"' + (!p.nome || S.prodAperto === i ? ' open' : '') + '><summary>Modifica</summary><div class="stack" style="margin-top:6px">' +
         '<label class="f">Nome<input type="text" data-pe="nome" data-i="' + i + '" value="' + h(p.nome) + '"></label>' +
         '<div class="grid2"><label class="f">Categoria<input type="text" data-pe="categoria" data-i="' + i + '" value="' + h(p.categoria) + '" placeholder="Es. PASTA"></label>' +
