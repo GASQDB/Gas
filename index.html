@@ -947,15 +947,23 @@ var URL_APP = location.origin + location.pathname;
       '</div></details>';
   }
   function tuttiHtml() {
-    var al = S.data.altri || [];
-    if (!al.length) return consegnaHtml();
-    return consegnaHtml() + '<details class="card"><summary>Cosa hanno ordinato gli altri (' + al.length + ')</summary><div class="list" style="margin-top:6px">' + al.map(function (a) {
-      return '<div class="li"><div class="grow"><b>' + h(a.nome) + '</b>' + (a.per_conto ? ' <span class="muted">per ' + h(a.per_conto) + '</span>' : '') +
+    var d = S.data, tutti = d.consegna || d.altri || [];
+    if (!tutti.length) return consegnaHtml();
+    var puoSpuntare = ['chiuso', 'consegnato'].indexOf(d.ordine.stato) >= 0;
+    var nCons = tutti.filter(function (a) { return a.consegnato; }).length;
+    var nPag = tutti.filter(function (a) { return a.pagato; }).length;
+    return consegnaHtml() + '<details class="card"' + (S.consAperto ? ' open' : '') + ' data-consdet><summary>Consegne e pagamenti di tutti (' + tutti.length + ')</summary><div class="stack" style="margin-top:6px">' +
+      '<p class="small muted" style="margin:0">' + (d.consegna ? 'Pagati ' + nPag + ' su ' + tutti.length + (puoSpuntare ? ' · consegnati ' + nCons + ' su ' + tutti.length + '. Se sostituisci il referente, spunta “Consegnato” quando dai la merce. I pagamenti li segna il referente.' : '') : '') + '</p>' +
+      '<div class="list">' + tutti.map(function (a, i) {
+      var io = d.socio_ordine && a.socio_id === d.socio_ordine.id && !a.per_conto;
+      var stato = a.pagato ? '<span style="color:var(--ok)">pagato' + (a.metodo ? ' · ' + h(a.metodo.toLowerCase()) : '') + '</span>' : (a.dichiarato ? '<span class="muted">dice di aver pagato (' + h(a.dichiarato.toLowerCase()) + ')</span>' : '<span class="muted">non pagato</span>');
+      return '<div class="li" style="flex-wrap:wrap"><div class="grow"><b>' + h(a.nome) + '</b>' + (io ? ' <span class="muted">(tu)</span>' : '') + (a.per_conto ? ' <span class="muted">per ' + h(a.per_conto) + '</span>' : '') +
         '<div class="small muted">' + a.righe.map(function (r) {
           var p = prodDi(r.prodotto_id);
           return h((r.quota ? r.quota.replace('/', ' su ') : (aGrammi(p) ? qtaTxt(p, r.quantita) : qt(r.quantita))) + ' ' + r.prodotto + (r.variante ? ' ' + r.variante : '') + (r.esclusi ? ' (senza ' + r.esclusi + ')' : ''));
-        }).join(' · ') + '</div></div><div class="amt num">' + conPeso(a.dovuto, a.da_pesare) + (a.pagato ? '<div class="small" style="color:var(--ok)">pagato</div>' : '') + '</div></div>';
-    }).join('') + '</div></details>';
+        }).join(' · ') + '</div></div><div class="amt num">' + conPeso(a.dovuto, a.da_pesare) + '<div class="small">' + stato + '</div></div>' +
+        (d.consegna && puoSpuntare ? '<label class="check" style="flex-basis:100%"><input type="checkbox" data-consegna2="' + i + '"' + (a.consegnato ? ' checked' : '') + '> Consegnato</label>' : '') + '</div>';
+    }).join('') + '</div></div></details>';
   }
 
   /* quote condivise: mezza o un terzo di cassa */
@@ -2534,6 +2542,11 @@ var URL_APP = location.origin + location.pathname;
     if (t.id === 'imp-scheda') { leggiDaLink(S.imp.foglio.link, t.value); return; }
     if (t.id === 'imp-intest') { S.imp.intest = t.checked; if (t.checked && !Object.keys(S.imp.mappa).length) S.imp.mappa = indovinaMappa(S.imp.righe[0]); disegna(); return; }
     if (t.id === 'imp-unita') { S.imp.unita = t.value; return; }
+    if (ds.consegna2 !== undefined) {
+      var cg = S.data.consegna[+ds.consegna2];
+      call('salvaEsito', { ordine_id: S.data.ordine.id, socio_id: cg.socio_id, per_conto: cg.per_conto, consegnato: t.checked }).then(function () { cg.consegnato = t.checked; S.consAperto = true; disegna(); toast(t.checked ? 'Segnato: consegnato a ' + cg.nome : 'Tolto: non consegnato'); }, function (e) { t.checked = !t.checked; toast(errMsg(e)); });
+      return;
+    }
     if (ds.consegna !== undefined) {
       var pg = S.data.paganti[+ds.consegna];
       call('salvaEsito', { ordine_id: S.data.ordine.id, socio_id: pg.socio_id, per_conto: pg.per_conto, consegnato: t.checked }).then(function (r) { S.data.paganti = r.paganti; toast(t.checked ? 'Consegnato' : 'Non consegnato'); }, function (e) { toast(errMsg(e)); });
