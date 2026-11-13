@@ -93,6 +93,10 @@ h3 { font-size: 1.05rem; font-weight: 600; }
 .card.con-img { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "testa img" "resto resto"; column-gap: 12px; row-gap: 10px; }
 .ord-testa { grid-area: testa; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .ord-resto { grid-area: resto; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.info-ord { display: flex; flex-direction: row-reverse; align-items: center; gap: 14px; }
+.info-testo { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: inherit; }
+.info-img { flex: 0 0 auto; width: 96px; height: 96px; object-fit: contain; border-radius: 10px; background: #fff; }
+@media (min-width: 700px) { .info-img { width: 240px; height: 150px; } }
 .testa-img { width: 64px; height: 64px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); flex: 0 0 auto; }
 @media (min-width: 700px) { .testa-img { width: 110px; height: 80px; } }
 .ord-img { grid-area: img; width: 68px; height: 68px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
@@ -817,12 +821,12 @@ var URL_APP = location.origin + location.pathname;
 
     var testa = '<div class="top"><button class="back" data-act="back">‹ Indietro</button>' +
       '<span class="eyebrow">' + h(o.fornitore || 'Ordine') + ' · referente ' + h(o.referente) + '</span>' +
-      '<div class="row between" style="align-items:center;flex-wrap:nowrap">' + imgTesta(o) + '<h1 class="grow">' + h(o.titolo) + '</h1>' + pill(o.stato) + '</div></div>';
-    var info = '<div class="card">' +
+      '<div class="row between"><h1 class="grow">' + h(o.titolo) + '</h1>' + pill(o.stato) + '</div></div>';
+    var info = '<div class="card info-ord">' + (o.immagine ? '<img class="info-img" src="' + h(urlImg(o.immagine)) + '" alt="" onerror="this.style.display=\'none\'">' : '') + '<div class="info-testo">' +
       (o.chiusura ? '<div>Si ordina fino a <b>' + h(fineOrdine(o)) + '</b>' + (quandoChiude(o) ? ' <span class="pill due">chiude ' + h(chiudeA(o)) + '</span>' : '') + '</div>' : '') +
       (o.consegna ? '<div>Consegna <b>' + h(dataLunga(o.consegna)) + '</b></div>' : '') +
       '<div>' + (o.pagamento === 'anticipato' ? 'Si paga <b>prima della consegna</b>, al referente.' : 'Si paga <b>alla consegna</b>, al referente.') + '</div>' +
-      (o.note ? '<div class="muted">' + h(o.note) + '</div>' : '') + '</div>';
+      (o.note ? '<div class="muted">' + h(o.note) + '</div>' : '') + '</div></div>';
     var avvisi = '';
     if (perAltri) avvisi += '<div class="notice warn">Stai ordinando per <b>' + h(d.socio_ordine.nome) + '</b>.</div>';
     if (!mod) avvisi += '<div class="notice warn">L\'ordine è chiuso: puoi solo vedere cosa hai ordinato.</div>';
