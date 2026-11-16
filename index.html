@@ -1322,10 +1322,11 @@ var URL_APP = location.origin + location.pathname;
       refSel + '<button class="btn" data-act="salva-dati">' + (d.nuovo ? 'Crea ordine e aggiungi i prodotti' : 'Salva dati') + '</button></div>';
   }
 
-  var CAMPI_IMP = [['nome', 'Nome del prodotto', /^\s*(descr|prodott|nome|tipologia|articolo)/i, 'obbligatorio'], ['dettaglio', 'Altra descrizione', /^\s*descr\w*\s*1|dettagl|piccola\s*descr/i, 'aggiunta al nome per distinguere prodotti simili, es. trafila ruvida'], ['dettaglio2', 'Altra descrizione (2)', /^\s*descr\w*\s*[2-9]/i, 'aggiunta anche questa al nome, es. semola integrale'], ['categoria', 'Categoria', /categ|tipo prod|reparto/i, 'per raggruppare i prodotti, facoltativa'], ['codice', 'Codice articolo', /^\s*cod/i, 'aggiunto al nome solo se due prodotti hanno nome e descrizioni identici'],
+  var CAMPI_IMP = [['nome', 'Nome del prodotto', /^\s*(descr|prodott|nome|tipologia|articolo)/i, 'obbligatorio'], ['dettaglio', 'Altra descrizione', /^\s*descr\w*\s*1|dettagl|piccola\s*descr|^\s*descrizione\s*$/i, 'aggiunta al nome per distinguere prodotti simili, es. trafila ruvida'], ['dettaglio2', 'Altra descrizione (2)', /^\s*descr\w*\s*[2-9]/i, 'aggiunta anche questa al nome, es. semola integrale'], ['categoria', 'Categoria', /categ|tipo prod|reparto/i, 'per raggruppare i prodotti, facoltativa'], ['codice', 'Codice articolo', /^\s*cod/i, 'aggiunto al nome solo se due prodotti hanno nome e descrizioni identici'],
     ['minimo', 'Minimo ordinabile', /minimo|pezzatura/i, 'per i prodotti al kg: es. 300 g, poi il socio sceglie i grammi'],
     ['peso_intero', 'Peso del pezzo intero', /intero|intera/i, 'per chi compra il pezzo intero, es. 1200 g'],
-    ['formato', 'Confezione o formato', /formato|peso|confez|stile/i, 'es. cassa 15 kg, 500 g'],
+    ['formato', 'Confezione o formato', /formato|peso|confez|stile|^\s*porzion/i, 'es. cassa 15 kg, 500 g'],
+    ['prezzo_kg', 'Prezzo al kg (se c\'è anche il prezzo del pezzo)', /€\s*\/\s*kg|€\s*al\s*kg|prezzo\s*(al\s*)?kg/i, 'per i pezzi “circa 500 g”: si paga il peso reale'],
     ['prezzo', 'Prezzo', /ivato|prezzo|€|euro|listino/i, 'obbligatorio: il prezzo che pagano i soci (prima degli sconti dell\'ordine)'], ['qta_conf', 'Pezzi per cartone', /pezzi|cartone|conf\.|n\. ?pz/i, 'solo se si ordina a cartoni e il prezzo è del singolo pezzo'],
     ['varianti', 'Varianti', /variet|varian|gusto/i, 'es. varietà di mele, separate da virgola, facoltative'],
     ['tipo_ordine', 'Si ordina a pezzi o a peso', /tipo ordine|tipologia|si ordina|^unit|pezzo\s*\/\s*peso|peso\s*\/\s*pezzo/i, 'colonna con “pz” o “peso”: “peso” = il socio ordina in kg']];
@@ -1532,12 +1533,19 @@ var URL_APP = location.origin + location.pathname;
     });
     // per il prezzo preferisci la colonna "ivato" se c'è
     for (var j = 0; j < intest.length; j++) if (/ivato/i.test(intest[j])) { m.prezzo = j; break; }
+    // c'è solo la colonna "€/kg": è quella il prezzo
+    if (m.prezzo === undefined && m.prezzo_kg !== undefined) { m.prezzo = m.prezzo_kg; delete m.prezzo_kg; }
     return m;
   }
   function estraiImport() {
     var im = S.imp, m = im.mappa;
     var righe = im.intest ? im.righe.slice(1) : im.righe;
-    var bello = function (t) { t = String(t || '').trim(); return (t && t === t.toUpperCase() && /[A-Z]/.test(t)) ? t.charAt(0) + t.slice(1).toLowerCase() : t; };
+    var bello = function (t) {
+      t = String(t || '').replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').trim().replace(/\(([^)]*)\)/g, function (m, x) { return x === x.toUpperCase() ? '(' + x.toLowerCase() + ')' : m; });
+      var base = t.replace(/\([^)]*\)/g, ''), maiu = (base.match(/[A-ZÀ-Ý]/g) || []).length, minu = (base.match(/[a-zà-ÿ]/g) || []).length;
+      if (!maiu || minu > maiu / 6) return t;   // già scritto normale
+      return t.charAt(0) + t.slice(1).toLowerCase();
+    };
     var UNITA = ['cassa', 'cassetta', 'plateau', 'sacco', 'sacchi', 'vaso', 'bottiglia', 'cartone', 'fusto', 'barattolo', 'confezione', 'pacco', 'latta', 'busta', 'vasetto', 'scatola'];
     var extra = [];
     var prezzoKgTit = im.intest && m.prezzo !== undefined && m.prezzo !== '' && /\bkg\b|al\s*chil/i.test(String(im.righe[0][m.prezzo] || ''));
@@ -1562,9 +1570,11 @@ var URL_APP = location.origin + location.pathname;
       var prezzoTesto = g('prezzo');
       var alKg = /(^|[^a-z])kg\b|al\s*kg|al\s*chil|\/\s*kg/i.test(prezzoTesto) || /prezzo al kg/i.test(formato);
       if (alKg && !/prezzo al kg/i.test(formato)) formato = formato ? formato + ' · prezzo al kg' : 'prezzo al kg';
+      // nome che ripete per intero la descrizione (es. "BOX RISPARMIO 3 kg 500g salsiccia, …"): la descrizione si toglie dal nome
+      [g('dettaglio'), g('dettaglio2')].forEach(function (d) { d = String(d || '').replace(/\s+/g, ' ').trim(); var n = nome.replace(/\s+/g, ' '); if (d.length > 15 && n.length > d.length && n.slice(-d.length) === d) nome = n.slice(0, -d.length).trim(); });
       var dett = [g('dettaglio'), g('dettaglio2')].filter(function (d) { return d && normNome(nome).indexOf(normNome(d)) < 0; });
       // "Tiglio, acacia, rovo, castagno": una lista di gusti diventa le varianti
-      if (!varianti && dett.length === 1 && (dett[0].match(/,/g) || []).length >= 2) { varianti = dett[0].split(/\s*,\s*|\s+e\s+/).filter(Boolean).map(function (v) { return v.charAt(0).toUpperCase() + v.slice(1); }).join(', '); dett = []; }
+      if (!varianti && dett.length === 1 && (dett[0].match(/,/g) || []).length >= 2 && dett[0].length < 120 && dett[0].split(/\s*,\s*/).every(function (v) { return v.length <= 25; })) { varianti = dett[0].split(/\s*,\s*|\s+e\s+/).filter(Boolean).map(function (v) { return v.charAt(0).toUpperCase() + v.slice(1); }).join(', '); dett = []; }
       // descrizioni brevi ("dolce", "magro") nel nome, quelle lunghe ("solitamente si usa sulla pizza") sotto, in piccolo
       dett = dett.map(function (d) { return d === d.toUpperCase() && /[A-Z]/.test(d) ? d.charAt(0) + d.slice(1).toLowerCase() : d; });
       var lunghe = dett.filter(function (d) { return d.length > 22; }), corte = dett.filter(function (d) { return d.length <= 22; });
@@ -1572,6 +1582,15 @@ var URL_APP = location.origin + location.pathname;
       if (lunghe.length) formato = formato ? formato + ' · ' + lunghe.join(' · ') : lunghe.join(' · ');
       var nonOrd = r.some(function (c) { return /non\s*ordinabil/i.test(String(c)); });
       var p0 = { nome: bello(nome), categoria: bello(g('categoria')) || catCorr, formato: formato, prezzo: numIt(prezzoTesto), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: alKg, disponibile: true, riga: r, nonOrd: nonOrd };
+      // colonna €/kg accanto al prezzo del pezzo: i pezzi "ca. 700 gr" si pagano a peso reale
+      var pKg = numIt(g('prezzo_kg')), fRaw = g('formato'), gPz = grammi(fRaw);
+      if (pKg > 0) {
+        // si importano tutte e tre: porzione, €/kg e prezzo della porzione (che resta il prezzo stimato)
+        var circa = gPz && /(^|\s)c\.?\s*a\.?\s|circa/i.test(fRaw + ' ');
+        var porz = bello(fRaw).replace(/^c\.?\s*a\.?\s*/i, 'circa ');
+        p0.formato = [porz, eur(pKg).replace(/\s*€/, ' €') + '/kg'].concat(lunghe).filter(Boolean).join(' · ');
+        if (circa) { p0.peso_variabile = true; p0.qta_conf = 1; p0.unita = 'pz'; }
+      } else if (formato) p0.formato = formato.replace(/\s+/g, ' ').replace(/^[^·]+/, function (x) { return bello(x.trim()) + ' '; }).trim();
       // listini con il prezzo al kg nel titolo della colonna (es. formaggi freschi)
       var tipo = g('tipo_ordine').toLowerCase(), gMin = grammi(g('minimo')), gInt = grammi(g('peso_intero')), gFor = grammi(g('formato'));
       if (prezzoKgTit && !im.unita) {
@@ -1602,12 +1621,17 @@ var URL_APP = location.origin + location.pathname;
     });
     out = tenuti;
     // prodotti con lo stesso nome e confezione: si distinguono con il codice articolo
-    var conta = {};
-    out.forEach(function (p) { var k = normNome(p.nome) + '|' + normNome(p.formato); conta[k] = (conta[k] || 0) + 1; });
+    var conta = {}, contaN = {};
+    out.forEach(function (p) { var k = normNome(p.nome) + '|' + normNome(p.formato); conta[k] = (conta[k] || 0) + 1; contaN[normNome(p.nome)] = (contaN[normNome(p.nome)] || 0) + 1; });
     out.forEach(function (p) {
       var cod = m.codice === undefined || m.codice === '' ? '' : String(p.riga[m.codice] || '').trim();
       p.codice = cod;
       if (cod && conta[normNome(p.nome) + '|' + normNome(p.formato)] > 1) p.nome += ' (' + cod + ')';
+      // stesso nome senza codice (es. due "Latta" di olio): si aggiunge la parte finale breve della descrizione ("Origine Puglia")
+      else if (!cod && contaN[normNome(p.nome)] > 1) {
+        var fine = String(p.formato || '').split(/\s*[.·]\s+/).map(function (x) { return x.replace(/[.\s]+$/, ''); }).filter(Boolean).pop() || '';
+        if (fine && fine.length <= 30) p.nome += ' – ' + fine.charAt(0).toLowerCase() + fine.slice(1);
+      }
     });
     return out;
   }
@@ -1624,7 +1648,7 @@ var URL_APP = location.origin + location.pathname;
 
   /* ---- quantità già ordinate dai soci (una colonna per socio) ---- */
   function normNome(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
-  var NON_PERSONA = /^(tot|q\.?\s*t|quantit|prezz|import|scont|pi-|dispon|cod|iva|listin|serviz|peso|pezz|carton|descr|tipo|formato|confez|stile|categ|note|nome$|n\.?$|nr|data|€|euro)/i;
+  var NON_PERSONA = /^(porzion|tot|q\.?\s*t|quantit|prezz|import|scont|pi-|dispon|cod|iva|listin|serviz|peso|pezz|carton|descr|tipo|formato|confez|stile|categ|note|nome$|n\.?$|nr|data|€|euro)/i;
   /** riconosce un socio dal titolo di colonna: "Francesca C", "francy B.", "Ester", "Giuseppe 2" (= persona esterna di Giuseppe) */
   function trovaSocio(tit, soci) {
     var t = normNome(tit); if (!t) return null;
