@@ -91,6 +91,12 @@ h3 { font-size: 1.05rem; font-weight: 600; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .card.tap { cursor: pointer; }
 .card.con-img { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "testa img" "resto resto"; column-gap: 12px; row-gap: 10px; }
+.pimg { width: 44px; height: 44px; flex: 0 0 auto; border-radius: 50%; }
+img.pfoto { object-fit: cover; border-radius: 10px; cursor: zoom-in; background: #fff; }
+.pimg.piccola { width: 32px; height: 32px; }
+.compatta .pimg { width: 36px; height: 36px; }
+.zoom-foto { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+.zoom-foto img { max-width: 100%; max-height: 90vh; border-radius: 12px; background: #fff; }
 .card.mini { flex-direction: row; align-items: flex-start; gap: 12px; padding: 12px; }
 .mini-img { width: 56px; height: 56px; flex: 0 0 auto; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
 .mini-img.vuota { display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.4rem; color: var(--accent); background: var(--accent-soft); border: 0; }
@@ -762,7 +768,7 @@ var URL_APP = location.origin + location.pathname;
       } else if (!aperto && o.consegna) quando = 'Consegna ' + h(dataBreve(o.consegna));
       var liberePill = o.quote_libere ? ' <span class="pill due">' + o.quote_libere + (o.quote_libere === 1 ? ' quota libera' : ' quote libere') + '</span>' : '';
       var mio = o.ho_ordinato ? '<span class="pill ok">Tuo: <span class="num">' + conPeso(o.mio_totale, o.mio_da_pesare) + '</span></span>' : '';
-      var img = o.immagine ? '<img class="mini-img" src="' + h(urlImg(o.immagine)) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="mini-img vuota" aria-hidden="true">' + h((o.fornitore || o.titolo || '?').charAt(0).toUpperCase()) + '</div>';
+      var img = o.immagine ? '<img class="mini-img" src="' + h(urlImg(o.immagine)) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : iconaMulti(tipiOrdine(o), 'mini-img disegno');
       var bott = aperto ? '<span class="btn small">' + (o.ho_ordinato ? 'Modifica' : 'Ordina') + '</span>' : '<span class="btn small quiet">Vedi</span>';
       var ricorda = aperto && o.chiusura ? '<button class="linkbtn" data-act="ricorda" data-id="' + h(o.id) + '" aria-label="Mettilo nel calendario">🔔 Ricordami</button>' : '';
       return '<div class="card tap mini" data-ordine="' + h(o.id) + '" role="button" tabindex="0">' + img +
@@ -816,6 +822,82 @@ var URL_APP = location.origin + location.pathname;
   }
   /* importo con la parte "da pesare" (fornitori senza importi presunti) */
   function imgTesta(o) { return o && o.immagine ? '<img class="testa-img" src="' + h(urlImg(o.immagine)) + '" alt="" onerror="this.style.display=\'none\'">' : ''; }
+  var ICONE = {"pasta":["#FCEFCF","<g transform=\"rotate(-28 32 32)\"><g><path d=\"M12 24 h28 l4 -6 h-28z\" fill=\"#F4C55A\"/><path d=\"M12 24 l4 -6\" stroke=\"#D99A2B\" stroke-width=\"1.6\"/><path d=\"M18 23 l3 -4 M24 23 l3 -4 M30 23 l3 -4 M36 23 l3 -4\" stroke=\"#E3A93A\" stroke-width=\"1.4\"/><ellipse cx=\"42\" cy=\"21\" rx=\"2\" ry=\"3.6\" transform=\"rotate(34 42 21)\" fill=\"#C98A22\"/></g><g transform=\"translate(-2 13)\"><path d=\"M12 24 h28 l4 -6 h-28z\" fill=\"#F7CF6B\"/><path d=\"M18 23 l3 -4 M24 23 l3 -4 M30 23 l3 -4 M36 23 l3 -4\" stroke=\"#E3A93A\" stroke-width=\"1.4\"/><ellipse cx=\"42\" cy=\"21\" rx=\"2\" ry=\"3.6\" transform=\"rotate(34 42 21)\" fill=\"#C98A22\"/></g><g transform=\"translate(4 26)\"><path d=\"M12 24 h24 l4 -6 h-24z\" fill=\"#F4C55A\"/><path d=\"M18 23 l3 -4 M24 23 l3 -4 M30 23 l3 -4\" stroke=\"#E3A93A\" stroke-width=\"1.4\"/><ellipse cx=\"38\" cy=\"21\" rx=\"2\" ry=\"3.6\" transform=\"rotate(34 38 21)\" fill=\"#C98A22\"/></g></g>"],"riso":["#EEF3E2","<path d=\"M20 22 q12 -8 24 0 l3 26 q-15 6 -30 0z\" fill=\"#E9DCC0\"/><path d=\"M20 22 q12 -8 24 0\" fill=\"none\" stroke=\"#B89B6A\" stroke-width=\"2\"/><rect x=\"24\" y=\"31\" width=\"16\" height=\"10\" rx=\"2\" fill=\"#7FA36B\"/><g fill=\"#FFFFFF\"><ellipse cx=\"28\" cy=\"14\" rx=\"1.6\" ry=\"3\" transform=\"rotate(20 28 14)\"/><ellipse cx=\"34\" cy=\"12\" rx=\"1.6\" ry=\"3\" transform=\"rotate(-15 34 12)\"/><ellipse cx=\"38\" cy=\"16\" rx=\"1.6\" ry=\"3\" transform=\"rotate(40 38 16)\"/><ellipse cx=\"31\" cy=\"17\" rx=\"1.6\" ry=\"3\"/></g><g fill=\"#EFE7D2\" stroke=\"#D8CBA8\" stroke-width=\".6\"><ellipse cx=\"28\" cy=\"14\" rx=\"1.6\" ry=\"3\" transform=\"rotate(20 28 14)\"/><ellipse cx=\"34\" cy=\"12\" rx=\"1.6\" ry=\"3\" transform=\"rotate(-15 34 12)\"/><ellipse cx=\"38\" cy=\"16\" rx=\"1.6\" ry=\"3\" transform=\"rotate(40 38 16)\"/><ellipse cx=\"31\" cy=\"17\" rx=\"1.6\" ry=\"3\"/></g>"],"farina":["#F6EFE3","<path d=\"M18 50 q-3 -18 3 -30 l-2 -5 h26 l-2 5 q6 12 3 30z\" fill=\"#F3EBDD\" stroke=\"#CDBB98\" stroke-width=\"1.5\"/><path d=\"M21 20 h22\" stroke=\"#B89B6A\" stroke-width=\"2\"/><path d=\"M32 30 v14 M32 33 l-4 -3 M32 33 l4 -3 M32 38 l-4 -3 M32 38 l4 -3 M32 43 l-4 -3 M32 43 l4 -3\" stroke=\"#C99A3E\" stroke-width=\"1.8\" stroke-linecap=\"round\" fill=\"none\"/>"],"uova":["#FFF3DC","<path d=\"M10 40 h44 l-3 10 h-38z\" fill=\"#C9B497\"/><path d=\"M10 40 q5 4 11 0 q5 4 11 0 q5 4 11 0 q5 4 11 0\" fill=\"#B39E80\"/><ellipse cx=\"21\" cy=\"33\" rx=\"7\" ry=\"9\" fill=\"#F7E9D7\"/><ellipse cx=\"32\" cy=\"31\" rx=\"7\" ry=\"9.5\" fill=\"#E9C9A3\"/><ellipse cx=\"43\" cy=\"33\" rx=\"7\" ry=\"9\" fill=\"#F7E9D7\"/><ellipse cx=\"19\" cy=\"29\" rx=\"2\" ry=\"3\" fill=\"#FFFFFF\" opacity=\".7\"/><ellipse cx=\"30\" cy=\"27\" rx=\"2\" ry=\"3\" fill=\"#FFFFFF\" opacity=\".5\"/><ellipse cx=\"41\" cy=\"29\" rx=\"2\" ry=\"3\" fill=\"#FFFFFF\" opacity=\".7\"/>"],"pane":["#FBEBD7","<path d=\"M10 40 q0 -18 22 -18 q22 0 22 18 q0 6 -6 6 h-32 q-6 0 -6 -6z\" fill=\"#D48A3E\"/><path d=\"M12 40 q0 -14 20 -14 q20 0 20 14\" fill=\"none\" stroke=\"#E7A85E\" stroke-width=\"2\"/><path d=\"M20 30 l5 6 M29 28 l5 6 M38 29 l5 6\" stroke=\"#F3D3A1\" stroke-width=\"3\" stroke-linecap=\"round\"/>"],"salame":["#FBE4E1","<rect x=\"8\" y=\"24\" width=\"34\" height=\"18\" rx=\"9\" fill=\"#9E3B36\"/><path d=\"M14 26 v14 M20 25 v16 M26 25 v16 M32 25 v16\" stroke=\"#7E2B28\" stroke-width=\"1\" opacity=\".6\"/><path d=\"M8 33 q-3 -2 -2 -5\" stroke=\"#C9B497\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"45\" cy=\"38\" r=\"11\" fill=\"#C8504A\" stroke=\"#9E3B36\" stroke-width=\"2\"/><g fill=\"#F6D8CF\"><circle cx=\"41\" cy=\"35\" r=\"1.6\"/><circle cx=\"47\" cy=\"33\" r=\"1.3\"/><circle cx=\"49\" cy=\"40\" r=\"1.6\"/><circle cx=\"43\" cy=\"42\" r=\"1.3\"/><circle cx=\"45\" cy=\"37.5\" r=\"1\"/></g>"],"prosciutto":["#FBE7E4","<path d=\"M14 22 q14 -10 30 4 q10 10 2 20 q-8 8 -20 4 q-14 -6 -12 -28z\" fill=\"#E7857C\"/><path d=\"M14 22 q14 -10 30 4 q10 10 2 20\" fill=\"none\" stroke=\"#F6F0E8\" stroke-width=\"4\"/><path d=\"M20 28 q8 8 18 6\" stroke=\"#F3B2AA\" stroke-width=\"2\" fill=\"none\"/><rect x=\"9\" y=\"17\" width=\"9\" height=\"6\" rx=\"2\" transform=\"rotate(-35 13 20)\" fill=\"#EADBC4\"/>"],"carne":["#FBE6E2","<path d=\"M12 30 q2 -14 20 -14 q20 0 20 16 q0 14 -18 14 q-6 0 -10 -4 q-12 2 -12 -12z\" fill=\"#C2413A\"/><path d=\"M14 30 q2 -12 18 -12 q18 0 18 14 q0 12 -16 12\" fill=\"none\" stroke=\"#F4E9DC\" stroke-width=\"3\"/><path d=\"M22 28 q8 -4 14 2 M24 36 q8 2 14 -4\" stroke=\"#E46A61\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"40\" cy=\"31\" r=\"3.5\" fill=\"#F4E9DC\"/>"],"pollo":["#FFF0D9","<path d=\"M14 42 q-4 -16 14 -20 q18 -4 24 10 q4 12 -8 16 q-18 6 -30 -6z\" fill=\"#D9883B\"/><path d=\"M18 40 q2 -10 14 -12\" stroke=\"#EDB06A\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M44 26 l6 -8\" stroke=\"#F3E3C8\" stroke-width=\"4\" stroke-linecap=\"round\"/><circle cx=\"51\" cy=\"16\" r=\"3\" fill=\"#F3E3C8\"/><circle cx=\"53\" cy=\"19\" r=\"3\" fill=\"#F3E3C8\"/><path d=\"M16 44 l-6 4\" stroke=\"#F3E3C8\" stroke-width=\"4\" stroke-linecap=\"round\"/><circle cx=\"8\" cy=\"49\" r=\"3\" fill=\"#F3E3C8\"/><circle cx=\"10\" cy=\"52\" r=\"3\" fill=\"#F3E3C8\"/>"],"coniglio":["#EFEAF4","<ellipse cx=\"25\" cy=\"16\" rx=\"4.5\" ry=\"12\" transform=\"rotate(-12 25 16)\" fill=\"#CFC3B4\"/><ellipse cx=\"25\" cy=\"16\" rx=\"2\" ry=\"8\" transform=\"rotate(-12 25 16)\" fill=\"#EBC3C0\"/><ellipse cx=\"37\" cy=\"16\" rx=\"4.5\" ry=\"12\" transform=\"rotate(12 37 16)\" fill=\"#CFC3B4\"/><ellipse cx=\"37\" cy=\"16\" rx=\"2\" ry=\"8\" transform=\"rotate(12 37 16)\" fill=\"#EBC3C0\"/><ellipse cx=\"31\" cy=\"38\" rx=\"15\" ry=\"13\" fill=\"#DDD2C4\"/><circle cx=\"25\" cy=\"35\" r=\"2\" fill=\"#3B3029\"/><circle cx=\"37\" cy=\"35\" r=\"2\" fill=\"#3B3029\"/><path d=\"M29 41 h4 l-2 2z\" fill=\"#D98C8C\"/><path d=\"M31 43 v2 M31 45 q-3 2 -5 0 M31 45 q3 2 5 0\" stroke=\"#8E7E70\" stroke-width=\"1\" fill=\"none\"/>"],"tacchino":["#FBEBD8","<g stroke=\"#FFFFFF\" stroke-width=\"1\"><path d=\"M32 40 l-20 -16 a26 26 0 0 1 9 -10z\" fill=\"#C0562F\"/><path d=\"M32 40 l-11 -26 a26 26 0 0 1 11 -2z\" fill=\"#E59B3A\"/><path d=\"M32 40 v-28 a26 26 0 0 1 11 2z\" fill=\"#C0562F\"/><path d=\"M32 40 l11 -26 a26 26 0 0 1 9 10z\" fill=\"#E59B3A\"/><path d=\"M32 40 l20 -16 a26 26 0 0 1 3 11z\" fill=\"#C0562F\"/><path d=\"M32 40 l-20 -16 a26 26 0 0 0 -3 11z\" fill=\"#E59B3A\"/></g><ellipse cx=\"32\" cy=\"42\" rx=\"11\" ry=\"12\" fill=\"#7A4A2E\"/><circle cx=\"32\" cy=\"27\" r=\"7\" fill=\"#8E5A38\"/><circle cx=\"30\" cy=\"26\" r=\"1.3\" fill=\"#FFF\"/><circle cx=\"34\" cy=\"26\" r=\"1.3\" fill=\"#FFF\"/><path d=\"M31 29 l1 3 l1 -3z\" fill=\"#F2B33D\"/><path d=\"M33 30 q2 4 0 6\" stroke=\"#D2463C\" stroke-width=\"2\" fill=\"none\"/>"],"formaggio":["#FFF4D4","<path d=\"M8 40 l38 -18 l10 6 v16 l-48 6z\" fill=\"#F6C94B\"/><path d=\"M8 40 l38 -18 l10 6 l-48 12z\" fill=\"#FBDD7A\"/><path d=\"M8 40 v10 l48 -6 v-16z\" fill=\"#F0B931\"/><g fill=\"#E4A21E\"><ellipse cx=\"22\" cy=\"45\" rx=\"2.5\" ry=\"2\"/><ellipse cx=\"36\" cy=\"43\" rx=\"3\" ry=\"2.2\"/><ellipse cx=\"48\" cy=\"38\" rx=\"2\" ry=\"1.6\"/><ellipse cx=\"30\" cy=\"36\" rx=\"2.2\" ry=\"1.4\"/><ellipse cx=\"44\" cy=\"31\" rx=\"1.8\" ry=\"1.2\"/></g>"],"burro":["#FFF7DA","<path d=\"M10 40 l12 -10 h30 l-10 10z\" fill=\"#FFE58A\"/><path d=\"M10 40 h32 v10 h-32z\" fill=\"#F7D35A\"/><path d=\"M42 40 l10 -10 v10 l-10 10z\" fill=\"#E9BF3D\"/><rect x=\"8\" y=\"48\" width=\"48\" height=\"4\" rx=\"2\" fill=\"#C9D9E6\"/><path d=\"M30 22 l14 -8 l3 3 l-13 9z\" fill=\"#B9C4CC\"/><path d=\"M44 14 l8 -4 l2 3 l-7 4z\" fill=\"#8C6A4A\"/>"],"vino":["#F3E6EE","<path d=\"M20 52 v-24 q0 -6 4 -9 v-9 h6 v9 q4 3 4 9 v24z\" fill=\"#5B1F33\"/><rect x=\"24\" y=\"8\" width=\"6\" height=\"4\" fill=\"#B88A3C\"/><rect x=\"21\" y=\"32\" width=\"12\" height=\"10\" rx=\"1\" fill=\"#F4EBDD\"/><path d=\"M24 36 h6 M24 39 h4\" stroke=\"#B88A3C\" stroke-width=\"1\"/><path d=\"M38 26 h12 q1 10 -6 13 v9 h4 v2 h-10 v-2 h4 v-9 q-7 -3 -6 -13z\" fill=\"#E8EEF2\" opacity=\".95\"/><path d=\"M38.6 31 h10.8 q-1 6 -5.4 7 q-4.4 -1 -5.4 -7z\" fill=\"#8E2443\"/>"],"birra":["#FFF3D6","<rect x=\"16\" y=\"20\" width=\"24\" height=\"32\" rx=\"3\" fill=\"#F2B233\"/><path d=\"M40 26 h5 q5 0 5 6 v6 q0 6 -5 6 h-5\" fill=\"none\" stroke=\"#E2D9C8\" stroke-width=\"4\"/><path d=\"M14 22 q0 -8 7 -7 q2 -5 7 -4 q4 -4 9 0 q6 -1 6 6 q0 5 -5 5 h-20 q-4 0 -4 0z\" fill=\"#FFFDF6\"/><path d=\"M22 30 v16 M28 30 v16 M34 30 v16\" stroke=\"#F7C95A\" stroke-width=\"2\"/>"],"olio":["#EFF3DE","<path d=\"M22 52 v-22 q0 -5 5 -8 v-10 h8 v10 q5 3 5 8 v22z\" fill=\"#C6B83E\" opacity=\".95\"/><rect x=\"26\" y=\"8\" width=\"10\" height=\"5\" rx=\"1\" fill=\"#4F6B2E\"/><path d=\"M22 38 h18 v14 h-18z\" fill=\"#A99A24\"/><rect x=\"24\" y=\"30\" width=\"14\" height=\"8\" rx=\"1\" fill=\"#F6F1DE\"/><path d=\"M44 46 q6 -10 12 -6\" stroke=\"#5E7A35\" stroke-width=\"2\" fill=\"none\"/><ellipse cx=\"50\" cy=\"40\" rx=\"4\" ry=\"2\" transform=\"rotate(-30 50 40)\" fill=\"#7D9A44\"/><ellipse cx=\"46\" cy=\"49\" rx=\"3.6\" ry=\"4.6\" fill=\"#4E5E2A\"/>"],"miele":["#FFF1D0","<rect x=\"16\" y=\"24\" width=\"28\" height=\"28\" rx=\"6\" fill=\"#E9A21A\"/><rect x=\"18\" y=\"20\" width=\"24\" height=\"6\" rx=\"2\" fill=\"#C98A13\"/><rect x=\"21\" y=\"32\" width=\"18\" height=\"12\" rx=\"2\" fill=\"#FFF3D6\"/><path d=\"M26 38 l4 -3 l4 3 l-4 3z\" fill=\"#E9A21A\"/><path d=\"M46 12 l-6 14\" stroke=\"#9B6B3A\" stroke-width=\"2.5\" stroke-linecap=\"round\"/><g fill=\"#9B6B3A\"><rect x=\"43\" y=\"8\" width=\"8\" height=\"2.4\" rx=\"1\" transform=\"rotate(22 47 9)\"/><rect x=\"42\" y=\"12\" width=\"8\" height=\"2.4\" rx=\"1\" transform=\"rotate(22 46 13)\"/></g>"],"confettura":["#FBE4EA","<rect x=\"18\" y=\"24\" width=\"28\" height=\"28\" rx=\"5\" fill=\"#B3264A\"/><rect x=\"17\" y=\"17\" width=\"30\" height=\"8\" rx=\"2\" fill=\"#F1E3C6\"/><path d=\"M17 21 h30\" stroke=\"#D84B5F\" stroke-width=\"3\" stroke-dasharray=\"3 3\"/><rect x=\"22\" y=\"32\" width=\"20\" height=\"12\" rx=\"2\" fill=\"#FFF6EC\"/><circle cx=\"30\" cy=\"38\" r=\"2.2\" fill=\"#D6334F\"/><circle cx=\"34\" cy=\"38\" r=\"2.2\" fill=\"#D6334F\"/><path d=\"M32 35 l2 -2\" stroke=\"#4E7A3A\" stroke-width=\"1.2\"/>"],"conserve":["#FBE3DC","<rect x=\"18\" y=\"20\" width=\"28\" height=\"32\" rx=\"6\" fill=\"#D23B2A\"/><rect x=\"20\" y=\"15\" width=\"24\" height=\"7\" rx=\"2\" fill=\"#C9C1B4\"/><rect x=\"22\" y=\"30\" width=\"20\" height=\"12\" rx=\"2\" fill=\"#FFF6EC\"/><circle cx=\"32\" cy=\"36\" r=\"4\" fill=\"#E0442F\"/><path d=\"M30 32 l2 1 l2 -1\" stroke=\"#4E7A3A\" stroke-width=\"1.4\" fill=\"none\"/>"],"verdura":["#E8F2DF","<path d=\"M26 22 l10 0 l-4 30 q-1 3 -2 0z\" fill=\"#EE8A2E\"/><path d=\"M27 28 h4 M28 34 h3 M29 40 h2\" stroke=\"#D06F1A\" stroke-width=\"1.3\"/><path d=\"M31 22 q-6 -10 -10 -10 q4 4 6 10 M31 22 q0 -12 4 -14 q-1 6 -2 14 M31 22 q6 -8 12 -8 q-4 3 -9 8\" fill=\"#5E9A3C\" stroke=\"#4C8530\" stroke-width=\"2\" stroke-linecap=\"round\"/><circle cx=\"45\" cy=\"42\" r=\"8\" fill=\"#6FAE45\"/><circle cx=\"40\" cy=\"38\" r=\"5\" fill=\"#82BE57\"/><circle cx=\"48\" cy=\"36\" r=\"5\" fill=\"#5E9A3C\"/><path d=\"M45 46 v8\" stroke=\"#A8C98A\" stroke-width=\"3\"/>"],"frutta":["#FCE7E2","<path d=\"M32 22 q-10 -6 -16 2 q-6 10 2 22 q6 8 14 4 q8 4 14 -4 q8 -12 2 -22 q-6 -8 -16 -2z\" fill=\"#D9473A\"/><path d=\"M20 28 q-2 6 2 12\" stroke=\"#EE7D70\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M32 22 q0 -6 3 -10\" stroke=\"#7A5332\" stroke-width=\"2.5\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M34 15 q8 -6 12 0 q-6 4 -12 0z\" fill=\"#5E9A3C\"/>"],"cassetta":["#EEF0E0","<circle cx=\"20\" cy=\"28\" r=\"7\" fill=\"#D9473A\"/><circle cx=\"31\" cy=\"25\" r=\"7\" fill=\"#F2A33A\"/><circle cx=\"42\" cy=\"28\" r=\"7\" fill=\"#7FB04E\"/><circle cx=\"26\" cy=\"31\" r=\"6\" fill=\"#E8C547\"/><circle cx=\"37\" cy=\"31\" r=\"6\" fill=\"#C8504A\"/><path d=\"M10 32 h44 l-3 20 h-38z\" fill=\"#C79A5E\"/><path d=\"M12 38 h40 M13 45 h38\" stroke=\"#A97E45\" stroke-width=\"2\"/><rect x=\"26\" y=\"34\" width=\"12\" height=\"4\" rx=\"2\" fill=\"#7F5B2E\"/>"],"dolci":["#FBEAE0","<path d=\"M16 46 l4 -22 q12 -12 24 0 l4 22z\" fill=\"#C98A47\"/><path d=\"M20 24 q12 -14 24 0 q-2 4 -6 2 q-2 4 -6 1 q-3 4 -6 0 q-4 3 -6 -1 q-3 2 -0 -2z\" fill=\"#F7EEE2\"/><path d=\"M14 46 h36 l-2 6 h-32z\" fill=\"#B54A4A\"/><g fill=\"#E8C547\"><circle cx=\"26\" cy=\"36\" r=\"1.5\"/><circle cx=\"36\" cy=\"34\" r=\"1.5\"/><circle cx=\"31\" cy=\"41\" r=\"1.5\"/></g>"],"caffe":["#EFE6DC","<path d=\"M14 30 h30 v8 q0 14 -15 14 q-15 0 -15 -14z\" fill=\"#FFFFFF\" stroke=\"#D9CBBE\" stroke-width=\"1.5\"/><path d=\"M44 33 q8 0 8 6 q0 6 -8 6\" fill=\"none\" stroke=\"#D9CBBE\" stroke-width=\"3\"/><ellipse cx=\"29\" cy=\"30\" rx=\"15\" ry=\"3\" fill=\"#8A5A34\"/><path d=\"M40 24 v8\" stroke=\"#B59A7E\" stroke-width=\"1\"/><rect x=\"38\" y=\"31\" width=\"5\" height=\"6\" fill=\"#7FA36B\"/><path d=\"M22 22 q-3 -4 0 -8 M29 22 q-3 -4 0 -8\" stroke=\"#C8B4A2\" stroke-width=\"2\" fill=\"none\" stroke-linecap=\"round\"/>"],"pesce":["#E2F0F4","<path d=\"M10 32 q14 -14 32 0 q-18 14 -32 0z\" fill=\"#5C93B0\"/><path d=\"M42 32 l12 -9 v18z\" fill=\"#4A7C97\"/><path d=\"M16 32 q10 -6 22 0\" stroke=\"#8DBCD3\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"17\" cy=\"30\" r=\"1.8\" fill=\"#1F3B4D\"/>"],"detersivi":["#E3EEF7","<path d=\"M14 52 v-22 q0 -4 4 -6 l2 -8 h10 l2 8 q4 2 4 6 v22z\" fill=\"#4E9BCF\"/><path d=\"M20 16 h10 v-4 h-12 l-6 4\" fill=\"#2F6E99\"/><rect x=\"11\" y=\"15\" width=\"4\" height=\"3\" rx=\"1\" fill=\"#2F6E99\"/><rect x=\"18\" y=\"34\" width=\"14\" height=\"10\" rx=\"2\" fill=\"#FFFFFF\"/><path d=\"M21 39 q4 -4 8 0\" stroke=\"#4E9BCF\" stroke-width=\"1.6\" fill=\"none\"/><rect x=\"38\" y=\"30\" width=\"16\" height=\"22\" rx=\"3\" fill=\"#7FC4A8\"/><rect x=\"41\" y=\"25\" width=\"10\" height=\"6\" rx=\"1.5\" fill=\"#4E9A7C\"/><path d=\"M42 40 h8 M42 44 h6\" stroke=\"#FFFFFF\" stroke-width=\"2\" stroke-linecap=\"round\"/><g fill=\"#FFFFFF\"><circle cx=\"8\" cy=\"20\" r=\"2.5\" opacity=\".9\"/><circle cx=\"6\" cy=\"27\" r=\"1.6\" opacity=\".9\"/></g><g fill=\"none\" stroke=\"#A9CFE8\" stroke-width=\"1.2\"><circle cx=\"8\" cy=\"20\" r=\"2.5\"/><circle cx=\"6\" cy=\"27\" r=\"1.6\"/></g>"],"generico":["#ECEFE6","<path d=\"M16 26 h32 l-3 26 h-26z\" fill=\"#C79A5E\"/><path d=\"M22 26 q0 -12 10 -12 q10 0 10 12\" fill=\"none\" stroke=\"#7F5B2E\" stroke-width=\"3\"/><circle cx=\"25\" cy=\"22\" r=\"6\" fill=\"#7FB04E\"/><circle cx=\"37\" cy=\"21\" r=\"5\" fill=\"#D9473A\"/><path d=\"M31 18 v-6\" stroke=\"#5E9A3C\" stroke-width=\"3\" stroke-linecap=\"round\"/>"],"cosmetici":["#F7E6EE","<rect x=\"12\" y=\"34\" width=\"22\" height=\"16\" rx=\"4\" fill=\"#F4F0EA\" stroke=\"#E3C9D3\" stroke-width=\"1.2\"/><rect x=\"11\" y=\"28\" width=\"24\" height=\"7\" rx=\"3\" fill=\"#D987A6\"/><path d=\"M17 42 q6 -5 12 0\" stroke=\"#E7B3C6\" stroke-width=\"2\" fill=\"none\"/><path d=\"M40 52 v-20 q0 -3 3 -4 v-6 h6 v6 q3 1 3 4 v20z\" fill=\"#B7A3D6\"/><rect x=\"42\" y=\"14\" width=\"8\" height=\"8\" rx=\"2\" fill=\"#8E77B8\"/><rect x=\"42\" y=\"36\" width=\"8\" height=\"8\" rx=\"1.5\" fill=\"#FFFFFF\" opacity=\".85\"/><path d=\"M24 18 l2 -5 l2 5 l5 2 l-5 2 l-2 5 l-2 -5 l-5 -2z\" fill=\"#F2C14E\"/>"],"legumi":["#F4EEDC","<path d=\"M10 40 q22 16 44 0 v4 q-22 14 -44 0z\" fill=\"#C79A5E\"/><ellipse cx=\"32\" cy=\"40\" rx=\"22\" ry=\"6\" fill=\"#E6CFA4\"/><g><ellipse cx=\"22\" cy=\"36\" rx=\"5\" ry=\"3.4\" fill=\"#E9C27A\"/><ellipse cx=\"31\" cy=\"33\" rx=\"5\" ry=\"3.4\" fill=\"#B5543C\"/><ellipse cx=\"40\" cy=\"36\" rx=\"5\" ry=\"3.4\" fill=\"#E9C27A\"/><ellipse cx=\"27\" cy=\"39\" rx=\"4.6\" ry=\"3\" fill=\"#7A9A3E\"/><ellipse cx=\"36\" cy=\"40\" rx=\"4.6\" ry=\"3\" fill=\"#B5543C\"/><ellipse cx=\"31\" cy=\"28\" rx=\"4.6\" ry=\"3.2\" fill=\"#E9C27A\"/><ellipse cx=\"44\" cy=\"31\" rx=\"4\" ry=\"2.8\" fill=\"#7A9A3E\"/><ellipse cx=\"19\" cy=\"31\" rx=\"4\" ry=\"2.8\" fill=\"#B5543C\"/></g>"],"fruttasecca":["#F3E9DD","<path d=\"M14 30 q0 -12 12 -12 q12 0 12 12 q0 12 -12 12 q-12 0 -12 -12z\" fill=\"#B9844E\"/><path d=\"M26 18 v24 M18 24 q8 4 0 12 M34 24 q-8 4 0 12\" stroke=\"#94643A\" stroke-width=\"1.6\" fill=\"none\"/><ellipse cx=\"44\" cy=\"40\" rx=\"7\" ry=\"10\" transform=\"rotate(30 44 40)\" fill=\"#D9A866\"/><path d=\"M40 34 q4 6 8 12\" stroke=\"#B9844E\" stroke-width=\"1.2\" fill=\"none\"/><circle cx=\"22\" cy=\"48\" r=\"5.5\" fill=\"#A0673A\"/><path d=\"M19 45 q3 -3 6 0\" stroke=\"#7E4E2A\" stroke-width=\"1.4\" fill=\"none\"/>"],"agrumi":["#FFF1D6","<circle cx=\"26\" cy=\"34\" r=\"15\" fill=\"#F39A1E\"/><circle cx=\"21\" cy=\"29\" r=\"4\" fill=\"#F8B95A\" opacity=\".8\"/><path d=\"M26 19 q2 -5 6 -6\" stroke=\"#5E7A35\" stroke-width=\"2\" fill=\"none\"/><path d=\"M29 16 q8 -6 13 -1 q-7 4 -13 1z\" fill=\"#5E9A3C\"/><circle cx=\"45\" cy=\"42\" r=\"11\" fill=\"#F5D64A\"/><circle cx=\"45\" cy=\"42\" r=\"8.5\" fill=\"#FFF4B8\"/><g stroke=\"#F5D64A\" stroke-width=\"1.6\"><path d=\"M45 34 v16 M37 42 h16 M39.3 36.3 l11.4 11.4 M50.7 36.3 l-11.4 11.4\"/></g><circle cx=\"45\" cy=\"42\" r=\"1.6\" fill=\"#F5D64A\"/>"]};
+
+  // il disegno si sceglie dal nome del prodotto (in ordine: i più specifici prima)
+  var TIPI = [
+    ['detersivi', /detersiv|bucato|lavatric|lavastovigl|piatti|paviment|sgrassat|ammorbid|candeggin|igienizz|anticalcar|spugn|percarbonat|acido citrico|bicarbonat|detergente (casa|multiuso|superfici)/],
+    ['cosmetici', /sapon|shampoo|bagnoschiuma|balsamo|karite|crema (viso|mani|corpo)|deodorant|dentifric|cosmet|struccant|rossett|detergente intimo|sali da bagno|lozione|tonico|siero viso|scrub|profum/],
+    ['coniglio', /conigli/], ['tacchino', /tacchin/], ['uova', /\buova\b|^uov/],
+    ['pollo', /poll[oi]|faraon|gallin|anatr|cappon|quagli|sovracosc/],
+    ['pesce', /pesce|tonno|alici|acciugh|salmon|baccala|merluzz|sgombr|gamber|cozze|vongol|trota|orata|branzin|sardin|calamar|polpo|seppi/],
+    ['conserve', /\bragu|\bsug(o|hi|hett)|passata/], ['carne', /coppa fresca|arrosto con pancetta/],
+    ['salame', /salam|salsicc|cotechin|zampon|mortadell|nduja|lonzino/],
+    ['prosciutto', /prosciutt|\bcrudo\b|\bcotto\b|culatell|speck|bresaola/],
+    ['carne', /coppa fresca|manzo|vitell|maial|suin|bovin|braciol|filett|costat|costin|arrosto|lonza|fettin|hamburger|macinat|spezzatin|bistecc|scamon|nervett|agnell|caprett|carne|ossobuc|polpett|box risparmio|brasat|bollito|trippa|fegat/],
+    ['salame', /salam|salsicc|cotechin|zampon|mortadell|nduja|lonzino|coppa|pancett|guancial|lardo|wurstel|porchett|cacciatorin|salum|insaccat|ciccioli/],
+    ['formaggio', /formagg|parmigian|\bgrana\b|pecorin|taleggio|gorgonzol|bergamin|caprin|ricott|mozzarell|stracchin|robiol|fontin|provol|\btom[ae]\b|tomin|asiago|montasio|scamorz|raspadur|caciott|burrat|\bfeta\b|crescenz|squacquer|primosale|dolcini|bocconcin|casera|bitto|caciocaval|emmental|\bbrie\b|camembert|quartirol|latteri|erborinat|caseific/],
+    ['burro', /burro|\bpanna\b|yogurt|yoghurt|\blatte\b|kefir|mascarpone/],
+    ['dolci', /panetton|pandoro|colomba|biscott|torta|torron|cioccolat|\bdolc|crostat|amarett|cantucc|zucchero|cacao|pasticc|brownie|muffin|merendin|pralin|meringh|strudel|savoiard/],
+    ['pasta', /\bpasta\b|penne|spaghett|mafald|pappardell|caserecc|fusill|rigaton|tagliatell|lasagn|gnocch|orecchiett|maccheron|farfall|linguin|trofie|raviol|tortell|testarol|paccher|bigoli|tagliolin|mezze maniche|conchigl|sedani|ditalin|bucatin|strozzaprett|\bpici\b|tortiglion|cavatell|fettuccin|stelline|capellini|vermicell|agnolott|cappellett|malloreddus|fregola|cous ?cous/],
+    ['riso', /\briso\b|risott|carnaroli|arborio|basmati|vialone/],
+    ['legumi', /\bceci\b|lenticch|fagiol|cicerch|lupin|\bfave\b|borlott|cannellin|zuppa|piselli secch|\bsoia\b|legum|azuki/],
+    ['pane', /\bpane\b|panin|focacc|grissin|cracker|taralli|fette biscott|piadin|schiacciat|frisell|pangrattato|crostin/],
+    ['farina', /farin|semola|polenta|cereal|\borzo\b|farro|avena|\bgrano\b|amido|crusca|fiocch|muesli|granola|miglio|quinoa|saraceno|amaranto|segale|lievit/],
+    ['miele', /miele|propoli|pappa reale|pollin/],
+    ['confettura', /confettur|marmellat|composta|spalmabil|gelatina/],
+    ['conserve', /passata|pelati|polpa di pomodoro|concentrato|pomodori secchi|\bsug|ragu|pesto|sottoli|sott olio|sottacet|giardinier|salsa|conserv|\bpate\b|\bcrema\b|zafferan|spezie|\bsale\b|capperi|\bolive\b|tartuf|condiment|brodo|\bdado/],
+    ['olio', /\bolio\b|\blatta\b|aceto|extravergine/],
+    ['vino', /\bvin[oi]\b|bonarda|buttafuoco|barbera|nebbiol|lambrusc|prosecco|spumant|pinot|chardonnay|sangiovese|chianti|dolcetto|merlot|cabernet|moscato|grappa|liquor|\bamaro\b|vermouth|franciacorta|barolo|barbaresco|grignolino|sauvignon|riesling|malvasia|verdicchio|primitivo|negroamaro|aglianico|montepulciano|valpolicella|amarone|rosato|bollicin/],
+    ['birra', /birr|\bale\b|\bipa\b|lager|weiss|stout|\bpils|lamberale|blanche|\bbock\b/],
+    ['caffe', /caff|\bte\b|\bthe\b|tisan|infus|camomill|cicoria|ginseng|matcha|rooibos/],
+    ['agrumi', /aranc|limon|mandarin|clementin|pompelm|bergamott|cedr|agrum|kumquat|\blime\b/],
+    ['fruttasecca', /\bnoc[ei]\b|mandorl|nocciol|pistacch|anacard|arachid|frutta secca|uvett|datteri\b|dattero|fichi secchi|castagn|pinoli|prugne secche|semi di/],
+    ['frutta', /\bmel[ae]\b|\bpere?\b|kiwi|banan|\buva\b|frutt|fragol|cilieg(e|ie)\b|albicocc|\bpesche\b|prugn|susin|cachi|kaki|melogran|ananas|avocado|mirtill|lampon|\bfichi\b|melone|anguria|cocomer|ribes|nespol|mango/],
+    ['verdura', /verdur|ortagg|insalat|patat|carot|zucch|cipoll|\baglio\b|melanzan|peperon|cavol|broccol|spinac|bietol|finocch|sedano|porri|porro|radicch|lattug|rucola|cetriol|asparag|carciof|funghi|zucca|basilico|prezzemol|rosmarin|salvia|topinambur|\brape\b|ravanell|fagiolin|piselli|taccole|scarola|cime di rapa|catalogna|verza|songino|valeriana|germogli|pomodor/],
+    ['cassetta', /cassett|cesto|panier|\bbox\b|\bkit\b/]
+  ];
+  function tipoDi(t) {
+    t = normNome(t); if (!t) return '';
+    for (var i = 0; i < TIPI.length; i++) if (TIPI[i][1].test(t)) return TIPI[i][0];
+    return '';
+  }
+  function tipoProdotto(p) {
+    var n = tipoDi(p.nome), c = tipoDi(p.categoria);
+    // "Fragoline di bosco" fra le confetture è una confettura, non frutta fresca
+    if (c && (!n || (/^(frutta|verdura|agrumi)$/.test(n) && /^(confettura|conserve|dolci)$/.test(c)))) return c;
+    if (n) return n;
+    var o = S.data && S.data.ordine;
+    return (o && (tipoDi(o.titolo) || tipoDi(o.fornitore))) || 'generico';
+  }
+  function iconaSvg(tipo, cls) {
+    var x = ICONE[tipo] || ICONE.generico;
+    return '<svg class="' + (cls || '') + '" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="31" fill="' + x[0] + '"/>' + x[1] + '</svg>';
+  }
+  /** 2 o 3 disegni insieme (fornitori con più tipi di prodotti) */
+  function iconaMulti(tipi, cls) {
+    if (tipi.length < 2) return iconaSvg(tipi[0] || 'generico', cls);
+    var pos = tipi.length === 2 ? [[-2, 6, 0.62], [24, 14, 0.62]] : [[-1, 0, 0.52], [31, 4, 0.52], [14, 30, 0.52]];
+    return '<svg class="' + (cls || '') + '" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#F7F5EE"/>' + tipi.slice(0, 3).map(function (t, i) {
+      var x = ICONE[t] || ICONE.generico, q = pos[i];
+      return '<g transform="translate(' + q[0] + ' ' + q[1] + ') scale(' + q[2] + ')"><circle cx="32" cy="32" r="31" fill="' + x[0] + '"/>' + x[1] + '</g>';
+    }).join('') + '</svg>';
+  }
+  /** i 2-3 tipi di prodotto più presenti in un ordine (per la Home, se non c'è il logo) */
+  function tipiOrdine(o) {
+    var conta = {};
+    String(o.nomi || '').split('|').forEach(function (n) { var t = tipoDi(n); if (t) conta[t] = (conta[t] || 0) + 1; });
+    var tipi = Object.keys(conta).sort(function (a, b) { return conta[b] - conta[a]; });
+    var tit = tipoDi(o.titolo) || tipoDi(o.fornitore);
+    if (tit && tipi.indexOf(tit) < 0) tipi.unshift(tit);
+    if (tit) { tipi = [tit].concat(tipi.filter(function (t) { return t !== tit; })); }
+    return tipi.slice(0, 3);
+  }
+  /** la foto del prodotto se il referente l'ha messa, altrimenti il disegno */
+  function imgProdotto(p, cls) {
+    if (p.immagine) return '<img class="' + (cls || 'pimg') + ' pfoto" src="' + h(urlImg(p.immagine)) + '" alt="" loading="lazy" data-zoom="' + h(p.immagine) + '">';
+    return iconaSvg(tipoProdotto(p), cls || 'pimg');
+  }
   function urlImg(id) { return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w400'; }
   function conPeso(tot, daPesare) { return daPesare ? (tot > 0.004 ? eur(tot) + ' + da pesare' : 'da pesare') : eur(tot); }
   function totaleMio() {
@@ -903,13 +985,13 @@ var URL_APP = location.origin + location.pathname;
           : '<b class="num">' + qt(q1) + ' ' + h(p.unita) + '</b>';
         var nota1 = (q1 > 0 && mod) ? '<input type="text" class="small" placeholder="Nota (facoltativa)" value="' + h(r1.note || '') + '" data-nota data-p="' + h(p.id) + '" data-v="" style="min-height:36px">' :
           (r1 && r1.note ? '<div class="muted small">Nota: ' + h(r1.note) + '</div>' : '');
-        out += '<div class="prod riga1' + (ha ? ' has' : '') + '"><div class="riga1-in"><div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
+        out += '<div class="prod riga1' + (ha ? ' has' : '') + '"><div class="riga1-in">' + imgProdotto(p) + '<div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
           '<div class="muted small">' + h(meta) + '</div></div>' +
           '<div class="prezzo num">' + (p.da_pesare ? eur(p.prezzo_kg) + '<div class="muted small">al kg</div>' : eur(p.prezzo_unita) + '<div class="muted small">a ' + h(p.unita) + '</div>') + '</div>' + ctrl1 + '</div>' + nota1 + chiAltri(p) + '</div>';
         return;
       }
       out += '<div class="prod ' + (ha ? 'has ' : '') + (p.disponibile ? '' : 'off') + '">' +
-        '<div class="row between" style="align-items:flex-start"><div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
+        '<div class="row between" style="align-items:flex-start;flex-wrap:nowrap;gap:10px">' + imgProdotto(p) + '<div class="grow"><div class="nome">' + h(p.nome) + '</div>' +
         '<div class="muted small">' + h([formatoVis(p), aGrammi(p) ? 'scegli i grammi' : confTxt(p), minTxt(p)].filter(Boolean).join(' · ')) + '</div></div>' +
         '<div class="prezzo num" style="text-align:right">' + (p.da_pesare ? eur(p.prezzo_kg) + '<div class="muted small" style="font-weight:400">al kg</div>' : eur(p.prezzo_unita) + '<div class="muted small" style="font-weight:400">a ' + h(p.unita) + '</div>') + '</div></div>' +
         (p.da_pesare ? '<div class="muted small">Si paga a peso: l\'importo lo sai dopo la pesata.</div>' : p.peso_variabile ? '<div class="muted small">Prezzo indicativo: si paga in base al peso reale.</div>' : '') +
@@ -1252,7 +1334,7 @@ var URL_APP = location.origin + location.pathname;
   /* ========== vista: gestione di un ordine ========== */
   function prepProdotti() {
     S.prodEdit = (S.data.prodotti || []).map(function (p) {
-      return { id: p.id, categoria: p.categoria, nome: p.nome, formato: p.formato, unita: p.unita, qta_conf: p.qta_conf, prezzo: p.prezzo, varianti: p.varianti.join(', '), peso_variabile: p.peso_variabile, disponibile: p.disponibile, codice: p.codice || '', contenuto: (p.contenuto || []).join('\n'), max_esclusi: p.max_esclusi || '', minimo: p.minimo || '', passo: p.passo || '' };
+      return { id: p.id, categoria: p.categoria, nome: p.nome, formato: p.formato, unita: p.unita, qta_conf: p.qta_conf, prezzo: p.prezzo, varianti: p.varianti.join(', '), peso_variabile: p.peso_variabile, disponibile: p.disponibile, codice: p.codice || '', contenuto: (p.contenuto || []).join('\n'), max_esclusi: p.max_esclusi || '', minimo: p.minimo || '', passo: p.passo || '', immagine: p.immagine || '' };
     });
     S.prodDirty = false; S.imp = null; S.conferma = ''; S.fg = null; S.fornMod = false;
   }
@@ -1336,9 +1418,13 @@ var URL_APP = location.origin + location.pathname;
     var imp = S.imp ? impPanel() : '<button class="btn ghost" data-act="imp-apri">Importa il listino: PDF, Excel o Google</button>';
     var lista = S.prodEdit.map(function (p, i) {
       var pu = numIt(p.prezzo) * (numIt(p.qta_conf) || 1) * k;
-      return '<div class="card"' + (p.disponibile === false ? ' style="opacity:.7"' : '') + '><div class="row between"><div class="grow"><b>' + (i + 1) + '. ' + h(p.nome || 'Nuovo prodotto') + '</b>' + (p.disponibile === false ? ' <span class="pill due">non disponibile</span>' : '') + (p.formato || p.varianti ? '<div class="small muted">' + h([String(p.formato || '').replace(/prezzo al kg/i, eur(numIt(p.prezzo) * k) + ' al kg'), p.varianti].filter(Boolean).join(' · ')) + '</div>' : '') + '</div><span class="num">' + eur(pu) + ' a ' + h(p.unita || 'pz') + '</span></div>' +
+      var salvato = (S.data.prodotti || []).some(function (x) { return x.id === p.id; });
+      var fotoCtl = '<div class="f"><b>Foto del prodotto</b><span class="small muted" style="display:block">Se la metti, i soci vedono la foto al posto del disegno. Tocca la foto per ingrandirla.</span><div class="row" style="align-items:center;gap:10px">' + imgProdotto(p) +
+        (salvato ? '<label class="btn small ghost" style="margin:0">' + (p.immagine ? 'Cambia foto' : 'Metti una foto') + '<input type="file" accept="image/*" data-pfoto="' + i + '" hidden></label>' + (p.immagine ? '<button class="btn small quiet" data-act="p-togli-foto" data-i="' + i + '">Togli la foto</button>' : '')
+          : '<span class="small muted">Salva i prodotti, poi potrai mettere la foto</span>') + '</div></div>';
+      return '<div class="card"' + (p.disponibile === false ? ' style="opacity:.7"' : '') + '><div class="row between" style="flex-wrap:nowrap;gap:10px">' + imgProdotto(p, 'pimg piccola') + '<div class="grow"><b>' + (i + 1) + '. ' + h(p.nome || 'Nuovo prodotto') + '</b>' + (p.disponibile === false ? ' <span class="pill due">non disponibile</span>' : '') + (p.formato || p.varianti ? '<div class="small muted">' + h([String(p.formato || '').replace(/prezzo al kg/i, eur(numIt(p.prezzo) * k) + ' al kg'), p.varianti].filter(Boolean).join(' · ')) + '</div>' : '') + '</div><span class="num">' + eur(pu) + ' a ' + h(p.unita || 'pz') + '</span></div>' +
         '<details data-pd="' + i + '"' + (!p.nome || S.prodAperto === i ? ' open' : '') + '><summary>Modifica</summary><div class="stack" style="margin-top:6px">' +
-        '<label class="f">Nome<input type="text" data-pe="nome" data-i="' + i + '" value="' + h(p.nome) + '"></label>' +
+        '<label class="f">Nome<input type="text" data-pe="nome" data-i="' + i + '" value="' + h(p.nome) + '"></label>' + fotoCtl +
         '<div class="grid2"><label class="f">Categoria<input type="text" data-pe="categoria" data-i="' + i + '" value="' + h(p.categoria) + '" placeholder="Es. PASTA"></label>' +
         '<label class="f">Formato<input type="text" data-pe="formato" data-i="' + i + '" value="' + h(p.formato) + '" placeholder="Es. 500 g"></label>' +
         '<label class="f">Codice articolo<span class="hint">del fornitore, esce nel riepilogo</span><input type="text" data-pe="codice" data-i="' + i + '" value="' + h(p.codice || '') + '"></label>' +
@@ -1849,7 +1935,7 @@ var URL_APP = location.origin + location.pathname;
   }
 
   /* ---------- immagine dell'ordine: ridotta nel telefono (max 500 px, sfondo bianco) e salvata nel Drive del GAS ---------- */
-  function caricaImmagine(file) {
+  function caricaImmagine(file, iProd) {
     if (!/^image\//.test(file.type)) { toast('Scegli un file immagine (foto, JPG, PNG)'); return; }
     toast('Preparo l’immagine…');
     var url = URL.createObjectURL(file), im = new Image();
@@ -1858,8 +1944,11 @@ var URL_APP = location.origin + location.pathname;
       var cv = document.createElement('canvas'); cv.width = w; cv.height = hh;
       var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, hh); cx.drawImage(im, 0, 0, w, hh);
       URL.revokeObjectURL(url);
-      call('salvaImmagine', S.data.ordine.id, cv.toDataURL('image/jpeg', 0.85)).then(function (r) {
-        S.data.ordine.immagine = r.immagine; disegna(); toast('Immagine salvata');
+      var pe = iProd === undefined ? null : S.prodEdit[iProd];
+      call('salvaImmagine', S.data.ordine.id, cv.toDataURL('image/jpeg', 0.85), pe ? pe.id : '').then(function (r) {
+        if (pe) { pe.immagine = r.immagine; (S.data.prodotti || []).forEach(function (x) { if (x.id === pe.id) x.immagine = r.immagine; }); S.prodAperto = iProd; }
+        else S.data.ordine.immagine = r.immagine;
+        disegna(); toast(pe ? 'Foto del prodotto salvata' : 'Immagine salvata');
       }, function (e) { toast(errMsg(e)); });
     };
     im.onerror = function () { URL.revokeObjectURL(url); toast('Non riesco ad aprire questa immagine'); };
@@ -2328,6 +2417,13 @@ var URL_APP = location.origin + location.pathname;
   }
 
   document.addEventListener('click', function (ev) {
+    var zf = ev.target.closest('.zoom-foto');
+    if (zf) { zf.remove(); return; }
+    var zi = ev.target.closest('img[data-zoom]');
+    if (zi && !ev.target.closest('[data-ordine]')) {
+      var ov = document.createElement('div'); ov.className = 'zoom-foto'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Foto del prodotto: tocca per chiudere');
+      ov.innerHTML = '<img src="' + h(urlImg(zi.dataset.zoom).replace(/sz=w\d+/, 'sz=w1200')) + '" alt="">'; document.body.appendChild(ov); return;
+    }
     var t = ev.target.closest('button, [data-ordine], [data-gordine], [data-nav], a');
     if (!t) return;
     var ds = t.dataset, act = ds.act;
@@ -2461,6 +2557,12 @@ var URL_APP = location.origin + location.pathname;
       case 'fornitori': vai('fornitori', {}); break;
       case 'duplica': call('duplicaOrdine', S.data.ordine.id).then(function (r) { toast('Copia creata in bozza'); vai('gOrdine', { id: r.id, tab: 'dati' }, true); }, function (e) { toast(errMsg(e)); }); break;
       case 'salva-dati': salvaDati(); break;
+      case 'p-togli-foto': (function () {
+        var pe = S.prodEdit[+ds.i];
+        call('salvaImmagine', S.data.ordine.id, '', pe.id).then(function () {
+          pe.immagine = ''; (S.data.prodotti || []).forEach(function (x) { if (x.id === pe.id) x.immagine = ''; }); S.prodAperto = +ds.i; disegna(); toast('Foto tolta: torna il disegno');
+        }, function (e) { toast(errMsg(e)); });
+      })(); break;
       case 'p-nuovo': S.prodAperto = S.prodEdit.length; S.prodEdit.push({ nome: '', categoria: '', formato: '', unita: 'pz', qta_conf: 1, prezzo: 0, varianti: '', peso_variabile: false, disponibile: true }); S.prodDirty = true; disegna(); break;
       case 'p-togli': S.prodAperto = null; S.prodEdit.splice(+ds.i, 1); S.prodDirty = true; disegna(); break;
       case 'p-salva':
@@ -2611,6 +2713,7 @@ var URL_APP = location.origin + location.pathname;
     if (ds.nota !== undefined) { var r = qtaDi(ds.p, ds.v || ''); if (r) cambiaQta(ds.p, ds.v || '', r.quantita, t.value); return; }
     if (t.id === 'imp-file' && t.files && t.files[0]) { leggiFile(t.files[0]); return; }
     if (t.id === 'o-img' && t.files && t.files[0]) { caricaImmagine(t.files[0]); return; }
+    if (t.dataset && t.dataset.pfoto !== undefined && t.files && t.files[0]) { caricaImmagine(t.files[0], +t.dataset.pfoto); return; }
     if (t.id === 'chat-solo') { S.soloDaPagare = t.checked; var ct = document.getElementById('chat-testo'); if (ct) { ct.value = testoImporti(t.checked); var wa = ct.parentNode.querySelector('a.btn'); if (wa) wa.href = linkWA('', ct.value); } return; }
     if (ds.fgs !== undefined) { var fr = S.fg.righe[+ds.fgs]; fr.socio_id = t.value; fr.auto = false; disegna(); return; }
     if (ds.fgi !== undefined) { S.fg.righe[+ds.fgi].importo = Math.round(numIt(t.value) * 100) / 100; disegna(); return; }
