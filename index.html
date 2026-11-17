@@ -1392,7 +1392,7 @@ var URL_APP = location.origin + location.pathname;
     var mostra = trovati.slice(0, 50);
     var tabella = '<div class="table-wrap" style="max-height:420px;overflow-y:auto"><table><tr><th>Prodotto</th><th>Confezione</th><th class="r">Prezzo</th></tr>' +
       mostra.map(function (p) {
-        return '<tr><td><b>' + h(p.nome) + '</b>' + (p.varianti ? '<div class="small muted">varianti: ' + h(p.varianti) + '</div>' : '') + (p.contenuto ? '<div class="small">dentro (si possono escludere): ' + h(p.contenuto.split('\n').join(', ')) + '</div>' : '') + '</td><td>' + h(p.formato) + (p.qta_conf !== 1 && !p.peso_variabile ? ' · ' + qt(p.qta_conf) + ' pz' : '') + '<div class="small muted">' + (p.minimo ? 'a peso, minimo ' + Math.round(p.minimo * 1000) + ' g' : 'si ordina a ' + h(p.unita)) + '</div></td><td class="r">' + eur(p.prezzo) + (p.peso_variabile ? '<div class="small muted">al kg, a peso reale</div>' : '') + '</td></tr>';
+        return '<tr' + (p.disponibile === false ? ' style="opacity:.6"' : '') + '><td><b>' + h(p.nome) + '</b>' + (p.disponibile === false ? ' <span class="pill due">barrato: non disponibile</span>' : '') + (p.varianti ? '<div class="small muted">varianti: ' + h(p.varianti) + '</div>' : '') + (p.contenuto ? '<div class="small">dentro (si possono escludere): ' + h(p.contenuto.split('\n').join(', ')) + '</div>' : '') + '</td><td>' + h(p.formato) + (p.qta_conf !== 1 && !p.peso_variabile ? ' · ' + qt(p.qta_conf) + ' pz' : '') + '<div class="small muted">' + (p.minimo ? 'a peso, minimo ' + Math.round(p.minimo * 1000) + ' g' : 'si ordina a ' + h(p.unita)) + '</div></td><td class="r">' + eur(p.prezzo) + (p.peso_variabile ? '<div class="small muted">' + (/prezzo al kg/i.test(p.formato) ? 'al kg, a peso reale' : 'stima, si paga il peso reale') + '</div>' : '') + '</td></tr>';
       }).join('') + '</table></div>' + (trovati.length > mostra.length ? '<div class="small muted">… e altri ' + (trovati.length - mostra.length) + '</div>' : '');
     var correggi = '<details' + (trovati.length ? '' : ' open') + '><summary>I prodotti non sono giusti? Correggi</summary><div class="stack" style="margin-top:8px">' +
       '<p class="small">Per ogni voce scegli la colonna del foglio da cui prenderla. Accanto a ogni colonna vedi un esempio del suo contenuto.</p>' + origine +
@@ -1411,6 +1411,7 @@ var URL_APP = location.origin + location.pathname;
     var nGia = trovati.filter(function (p) { var k = normNome(p.nome) + '|' + normNome(p.formato); if (giaQui[k] > 0) { giaQui[k]--; return true; } return false; }).length;
     var nQ = (qtaHtml && im.conQta !== false) ? righeImport(trovati, colonneSoci(im, trovati)).length : 0;
     return '<div class="card stack">' + avviso + '<h3>Ho trovato ' + trovati.length + ' prodotti</h3>' +
+      (function () { var nb = trovati.filter(function (p) { return p.disponibile === false; }).length; return nb ? '<p class="small"><b>' + nb + (nb === 1 ? ' prodotto barrato' : ' prodotti barrati') + '</b> nel foglio: li aggiungo come <b>non disponibili</b> (i soci non li possono ordinare). Puoi riattivarli dopo da Modifica.</p>' : ''; })() +
       '<p class="small">Controlla che nomi e prezzi siano giusti. Se va bene, tocca il pulsante verde. Potrai comunque modificare ogni prodotto dopo.</p>' +
       qtaHtml +
       (nGia ? '<div class="small">' + nGia + ' di questi prodotti ci sono già nell’ordine: verranno aggiornati, non duplicati.</div>' : '') +
@@ -1457,7 +1458,12 @@ var URL_APP = location.origin + location.pathname;
       var pr = pdf ? caricaPdfJs().then(function () { return righeDaPdf(buf); })
         : caricaXlsx().then(function () {
           var wb = XLSX.read(buf, { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]];
-          return XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }).filter(function (r) { return r.some(function (c) { return String(c).trim(); }); });
+          var tutte = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: true });
+          var barr = {};
+          try { barr = righeBarrateXlsx(buf); } catch (e) { barr = {}; }
+          var r0 = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']).s.r : 0;
+          tutte.forEach(function (row, i) { if (barr[r0 + i]) row.barrata = true; });
+          return tutte.filter(function (r) { return r.some(function (c) { return String(c).trim(); }); });
         });
       pr.then(function (righe) {
         if (!righe.length) { toast(pdf ? 'Nel PDF non c\'è testo da leggere: forse è una foto o una scansione' : 'Il file è vuoto'); return; }
@@ -1466,6 +1472,40 @@ var URL_APP = location.origin + location.pathname;
     };
     fr.onerror = function () { toast('Non riesco ad aprire il file'); };
     fr.readAsArrayBuffer(file);
+  }
+  /** righe con il testo barrato in un file .xlsx (prodotti non disponibili): { numero riga (da 0): true } */
+  function righeBarrateXlsx(buf) {
+    var cfb = XLSX.CFB.read(new Uint8Array(buf), { type: 'array' }), dec = new TextDecoder('utf-8');
+    var txt = function (p) { var f = XLSX.CFB.find(cfb, '/' + p) || XLSX.CFB.find(cfb, 'Root Entry/' + p) || XLSX.CFB.find(cfb, p); return f && f.content ? dec.decode(f.content) : ''; };
+    var stili = txt('xl/styles.xml'); if (!stili) return {};
+    var fonts = ((stili.match(/<fonts[^>]*>([\s\S]*?)<\/fonts>/) || [])[1] || '').match(/<font\b[\s\S]*?(<\/font>|\/>)/g) || [];
+    var fBarr = fonts.map(function (f) { return /<strike(?![^>]*val="(0|false)")[\s\/>]/.test(f); });
+    var xfs = ((stili.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/) || [])[1] || '').match(/<xf\b[^>]*>/g) || [];
+    var xBarr = xfs.map(function (x) { var m = x.match(/fontId="(\d+)"/); return !!(m && fBarr[+m[1]]); });
+    if (!xBarr.some(Boolean) && !/<strike/.test(txt('xl/sharedStrings.xml'))) return {};
+    // testi condivisi barrati "a mano" dentro la cella
+    var sBarr = (txt('xl/sharedStrings.xml').match(/<si>[\s\S]*?<\/si>/g) || []).map(function (s) { return /<strike(?![^>]*val="(0|false)")[\s\/>]/.test(s); });
+    // il primo foglio del file
+    var wbx = txt('xl/workbook.xml'), rid = (wbx.match(/<sheet\b[^>]*r:id="([^"]+)"/) || [])[1];
+    var rels = txt('xl/_rels/workbook.xml.rels'), tgt = '';
+    (rels.match(/<Relationship\b[^>]*>/g) || []).forEach(function (r) { if (r.indexOf('Id="' + rid + '"') >= 0) tgt = (r.match(/Target="([^"]+)"/) || [])[1] || ''; });
+    tgt = tgt ? (tgt.charAt(0) === '/' ? tgt.slice(1) : 'xl/' + tgt.replace(/^\.\//, '')) : 'xl/worksheets/sheet1.xml';
+    var foglio = txt(tgt), out = {};
+    (foglio.match(/<row\b[\s\S]*?<\/row>/g) || []).forEach(function (row) {
+      var n = +((row.match(/<row\b[^>]*\br="(\d+)"/) || [])[1] || 0); if (!n) return;
+      var piene = 0, barr = 0;
+      (row.match(/<c\b[^>]*?(\/>|>[\s\S]*?<\/c>)/g) || []).forEach(function (c) {
+        var v = (c.match(/<v>([\s\S]*?)<\/v>/) || [])[1], inl = /<is>/.test(c);
+        if ((v === undefined || v === '') && !inl) return;
+        piene++;
+        var st = c.match(/^<c\b[^>]*\bs="(\d+)"/), b = !!(st && xBarr[+st[1]]);
+        if (!b && /^<c\b[^>]*\bt="s"/.test(c)) b = !!sBarr[+v];
+        if (!b && inl) b = /<strike(?![^>]*val="(0|false)")[\s\/>]/.test(c);
+        if (b) barr++;
+      });
+      if (piene && barr * 2 >= piene) out[n - 1] = true;
+    });
+    return out;
   }
   function righeDaPdf(buf) {
     return pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise.then(function (doc) {
@@ -1517,6 +1557,7 @@ var URL_APP = location.origin + location.pathname;
     toast('Lettura del foglio…');
     call('leggiFoglio', link, scheda).then(function (r) {
       if (!r.righe.length) { toast('La scheda è vuota'); return; }
+      if (r.barrate) r.righe.forEach(function (row, i) { if (r.barrate[i]) row.barrata = true; });
       r.link = link; preparaImport(r.righe, r); disegna();
       toast('Letto: ' + r.righe.length + ' righe');
     }, function (e) { toast(errMsg(e)); });
@@ -1581,7 +1622,7 @@ var URL_APP = location.origin + location.pathname;
       if (corte.length) nome = bello(nome) + ' – ' + corte.join(', ').toLowerCase();
       if (lunghe.length) formato = formato ? formato + ' · ' + lunghe.join(' · ') : lunghe.join(' · ');
       var nonOrd = r.some(function (c) { return /non\s*ordinabil/i.test(String(c)); });
-      var p0 = { nome: bello(nome), categoria: bello(g('categoria')) || catCorr, formato: formato, prezzo: numIt(prezzoTesto), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: alKg, disponibile: true, riga: r, nonOrd: nonOrd };
+      var p0 = { nome: bello(nome), categoria: bello(g('categoria')) || catCorr, formato: formato, prezzo: numIt(prezzoTesto), qta_conf: qc, varianti: varianti, unita: u, peso_variabile: alKg, disponibile: !r.barrata, riga: r, nonOrd: nonOrd };
       // colonna €/kg accanto al prezzo del pezzo: i pezzi "ca. 700 gr" si pagano a peso reale
       var pKg = numIt(g('prezzo_kg')), fRaw = g('formato'), gPz = grammi(fRaw);
       if (pKg > 0) {
@@ -1597,7 +1638,7 @@ var URL_APP = location.origin + location.pathname;
         if (/pezz|etto|peso|kg/.test(tipo) && !/confez|cadaun|vasett/.test(tipo)) {
           p0.unita = 'kg'; p0.qta_conf = 1; p0.peso_variabile = true; p0.formato = lunghe.join(' · '); p0.minimo = gMin ? gMin / 1000 : '';
           var mi = String(g('tipo_ordine')).match(/inter[oa][^\d]*(\d+(?:[.,]\d+)?)/i);
-          if (mi && (gInt || gFor)) extra.push({ nome: p0.nome + ' – intero', categoria: p0.categoria, formato: 'circa ' + (gInt || gFor) + ' g · prezzo al kg', prezzo: numIt(mi[1]), qta_conf: (gInt || gFor) / 1000, varianti: '', unita: 'pezzo intero', peso_variabile: true, disponibile: true, riga: r, nonOrd: false, dopo: p0 });
+          if (mi && (gInt || gFor)) extra.push({ nome: p0.nome + ' – intero', categoria: p0.categoria, formato: 'circa ' + (gInt || gFor) + ' g · prezzo al kg', prezzo: numIt(mi[1]), qta_conf: (gInt || gFor) / 1000, varianti: '', unita: 'pezzo intero', peso_variabile: true, disponibile: !r.barrata, riga: r, nonOrd: false, dopo: p0 });
         } else {
           var range = /\d\s*-\s*\d/.test(g('peso_intero') + ' ' + g('formato') + ' ' + g('minimo'));
           p0.unita = /cadaun/.test(tipo) ? 'pz' : (/vasett/.test(tipo) ? 'vasetto' : 'confezione');
@@ -2446,7 +2487,7 @@ var URL_APP = location.origin + location.pathname;
         var aggiornati = 0, aggiunti = [];
         nuovi.forEach(function (p) {
           var e = (esistenti[chiaveP(p)] || []).shift();
-          if (e) { ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); if (p.codice) e.codice = p.codice; if (p.contenuto) e.contenuto = p.contenuto; if (p.minimo) e.minimo = p.minimo; if (p.peso_variabile) e.peso_variabile = true; p.id = e.id; aggiornati++; }
+          if (e) { e.disponibile = p.disponibile; ['categoria', 'unita', 'qta_conf', 'prezzo', 'varianti'].forEach(function (k) { e[k] = p[k]; }); if (p.codice) e.codice = p.codice; if (p.contenuto) e.contenuto = p.contenuto; if (p.minimo) e.minimo = p.minimo; if (p.peso_variabile) e.peso_variabile = true; p.id = e.id; aggiornati++; }
           else { p.id = 'n' + Math.random().toString(36).slice(2, 11); aggiunti.push(p); }
         });
         var daImp = righeImport(nuovi, colQ).map(function (x) {
