@@ -1493,17 +1493,17 @@ var URL_APP = location.origin + location.pathname;
     var foglio = txt(tgt), out = {};
     (foglio.match(/<row\b[\s\S]*?<\/row>/g) || []).forEach(function (row) {
       var n = +((row.match(/<row\b[^>]*\br="(\d+)"/) || [])[1] || 0); if (!n) return;
-      var piene = 0, barr = 0;
-      (row.match(/<c\b[^>]*?(\/>|>[\s\S]*?<\/c>)/g) || []).forEach(function (c) {
-        var v = (c.match(/<v>([\s\S]*?)<\/v>/) || [])[1], inl = /<is>/.test(c);
-        if ((v === undefined || v === '') && !inl) return;
-        piene++;
+      // conta la prima cella scritta della riga (il nome del prodotto): le colonne dei soci con "0" spesso non sono barrate
+      var celle = row.match(/<c\b[^>]*?(\/>|>[\s\S]*?<\/c>)/g) || [];
+      for (var k = 0; k < celle.length; k++) {
+        var c = celle[k], v = (c.match(/<v>([\s\S]*?)<\/v>/) || [])[1], inl = /<is>/.test(c);
+        if ((v === undefined || v === '') && !inl) continue;
         var st = c.match(/^<c\b[^>]*\bs="(\d+)"/), b = !!(st && xBarr[+st[1]]);
         if (!b && /^<c\b[^>]*\bt="s"/.test(c)) b = !!sBarr[+v];
         if (!b && inl) b = /<strike(?![^>]*val="(0|false)")[\s\/>]/.test(c);
-        if (b) barr++;
-      });
-      if (piene && barr * 2 >= piene) out[n - 1] = true;
+        if (b) out[n - 1] = true;
+        break;
+      }
     });
     return out;
   }
